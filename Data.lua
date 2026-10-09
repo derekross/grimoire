@@ -38,6 +38,45 @@ ns.Data = {
 		},
 	},
 
+	portalOfSummoning = 437169,
+	shadowTrance = 17941, -- Nightfall proc aura
+
+	-- Menus: each entry lists every rank; the highest known one is cast.
+	curses = {
+		{ ranks = { 702, 1108, 6205, 7646, 11707, 11708 } },   -- Curse of Weakness
+		{ ranks = { 704, 7658, 7659, 11717 } },                -- Curse of Recklessness
+		{ ranks = { 1714, 11719 } },                           -- Curse of Tongues
+		{ ranks = { 440892, 1311676, 1311677, 1311680 } },     -- Curse of the Elements (new IDs in Forever)
+		{ ranks = { 18223 } },                                 -- Curse of Exhaustion (talent)
+		{ ranks = { 18288 } },                                 -- Amplify Curse (talent)
+	},
+	banes = {
+		{ ranks = { 980, 1014, 6217, 11711, 11712, 11713 } },  -- Bane of Agony
+		{ ranks = { 603 } },                                   -- Bane of Doom
+		{ ranks = { 1225228 } },                               -- Bane of Havoc (talent)
+	},
+	buffs = {
+		{ ranks = { 706, 1086, 11733, 11734, 11735 }, fallback = { 687, 696 } }, -- Demon Armor, else Demon Skin
+		{ ranks = { 19028 } },                                 -- Soul Link (talent)
+		{ ranks = { 18788 } },                                 -- Demonic Sacrifice (talent)
+		{ ranks = { 6229, 11739, 11740, 28610 } },             -- Shadow Ward
+		{ ranks = { 5697 } },                                  -- Unending Breath
+		{ ranks = { 132, 2970, 11743 } },                      -- Detect Invisibility
+		{ ranks = { 126 } },                                   -- Eye of Kilrogg
+		{ ranks = { 5500 } },                                  -- Sense Demons
+	},
+	-- Armor auras for the "no armor" reminder.
+	armor = { 687, 696, 706, 1086, 11733, 11734, 11735 },
+	-- durations are per rank, in seconds (PvE, before talents/diminishing returns)
+	control = {
+		{ ranks = { 710, 18647 }, durations = { 20, 30 }, banish = true },  -- Banish
+		{ ranks = { 5782, 6213, 6215 }, durations = { 10, 15, 20 } },       -- Fear
+		{ ranks = { 5484, 17928 }, durations = { 10, 15 } },                -- Howl of Terror
+		{ ranks = { 1098, 11725, 11726 }, durations = { 300, 300, 300 }, subjugate = true }, -- Subjugate Demon
+		{ ranks = { 6789, 17925, 17926 }, durations = { 3, 3, 3 } },        -- Death Coil
+	},
+	mounts = { 23161, 5784 }, -- Dreadsteed first, then Felsteed
+
 	-- family = UnitCreatureFamily("pet"), used to show the active demon's icon.
 	demons = {
 		{ spell = 688, family = "Imp" },

@@ -1,9 +1,9 @@
 ## Interface: 16001
 ## Title: |cff9482c9Grimoire|r [AllowLoadGameType camelot][ExcludeLoadGameType standard, classic]
-## Notes: Warlock helper for WoW Forever: one-button healthstones, soulstones, weapon stones, shards and demons.
+## Notes: Warlock helper for WoW Forever: stones, shards, curses, banes, demons, summoning, timers and alerts.
 ## Author: Derek Ross
 ## Version: 0.1.0
-## IconTexture: Interface\Icons\Warlock_ Healthstone
+## IconTexture: Interface\Icons\INV_Misc_Book_05
 ## OptionalDeps: ElvUI
 ## SavedVariables: GrimoireDB
 ## SavedVariablesPerCharacter: GrimoireCharDB
@@ -11,5 +11,8 @@
 Data.lua
 Core.lua
 Buttons.lua
+Speech.lua
+Timers.lua
+Summon.lua
 Options.lua
 ElvUI.lua

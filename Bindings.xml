@@ -1,0 +1,17 @@
+<Bindings>
+	<Binding name="CLICK GrimoireHealthstoneButton:LeftButton" header="GRIMOIRE" category="ADDONS"/>
+	<Binding name="CLICK GrimoireSoulstoneButton:LeftButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireWeaponStoneButton:LeftButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireWeaponStoneButton:RightButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireCursesButton:LeftButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireCursesButton:RightButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireBanesButton:LeftButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireBanesButton:RightButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireBuffsButton:LeftButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireControlButton:LeftButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireDemonsButton:LeftButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireMountButton:LeftButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireRitualButton:LeftButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireRitualButton:RightButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireSummonRow1:LeftButton" category="ADDONS"/>
+</Bindings>

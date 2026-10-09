@@ -15,12 +15,36 @@ ns.defaults = {
 	buttonSize = 36,
 	spacing = 4,
 	vertical = false,
+	hidden = {}, -- bar button key -> true to hide it
 	shardLow = 3,
 	shardCap = 0, -- 0 = off
+	sortShards = true,
 	tradeOnRightClick = true,
+	weaponWarnMinutes = 5,
+	defaults = {}, -- menu key -> spell entry index picked as that menu's default
+	armorReminder = true,
+
+	-- Timers and alerts
+	timers = true,
+	soulstoneTimer = true,
+	creatureAlert = true,
+	shadowTranceAlert = true,
+	shadowTranceSound = true,
+
+	-- Summoning
 	summonAnnounce = true,
 	summonMessage = "Summoning %t, please click the portal!",
-	weaponWarnMinutes = 5,
+	summonQueue = true,
+	summonKeywords = "123, summon, summ, sum pls, port pls",
+	summonSync = true,
+
+	-- Chat messages ("speech"): sent to party/raid only; open-world /say is blocked for addons.
+	speech = {
+		soulstone = true,
+		soulstoneWhisper = true,
+		demon = false,
+		mount = false,
+	},
 }
 
 -- Secret values (Midnight/Forever addon restrictions) can't be compared or stored.
@@ -46,6 +70,36 @@ function ns.Print(...)
 	print("|cff9482c9Grimoire:|r", ...)
 end
 
+-- Event dispatch: modules call ns:On(event, handler) -------------------------------
+
+local handlers = {}
+local unitEvents = {
+	UNIT_INVENTORY_CHANGED = true, UNIT_PET = true, UNIT_AURA = true,
+	UNIT_SPELLCAST_SENT = true, UNIT_SPELLCAST_START = true, UNIT_SPELLCAST_SUCCEEDED = true,
+	UNIT_SPELLCAST_FAILED = true, UNIT_SPELLCAST_INTERRUPTED = true,
+}
+
+function ns:On(event, handler)
+	if not handlers[event] then
+		handlers[event] = {}
+		if ns.ready then
+			if unitEvents[event] then
+				Grimoire:RegisterUnitEvent(event, "player")
+			else
+				Grimoire:RegisterEvent(event)
+			end
+		end
+	end
+	table.insert(handlers[event], handler)
+end
+
+local function Dispatch(event, ...)
+	for _, handler in ipairs(handlers[event] or {}) do
+		handler(event, ...)
+	end
+end
+ns.Dispatch = Dispatch
+
 -- Spell knowledge -------------------------------------------------------------
 
 local function IsKnown(spellID)
@@ -53,7 +107,27 @@ local function IsKnown(spellID)
 end
 ns.IsKnown = IsKnown
 
-ns.known = {}  -- family -> { rank = n, spellID = id }
+-- Highest known rank of a spell entry ({ ranks = { id, ... } } or { spell = id }).
+function ns.BestSpell(entry)
+	if entry.spell then return IsKnown(entry.spell) and entry.spell or nil end
+	local best
+	for _, id in ipairs(entry.ranks) do
+		if IsKnown(id) then best = id end
+	end
+	if not best and entry.fallback then
+		return ns.BestSpell({ ranks = entry.fallback })
+	end
+	return best
+end
+
+-- Rank index (1-based) of a spell ID within an entry, for per-rank data like durations.
+function ns.RankOf(entry, spellID)
+	for i, id in ipairs(entry.ranks or {}) do
+		if id == spellID then return i end
+	end
+end
+
+ns.known = {}  -- stone family -> { rank = n, spellID = id }
 ns.demons = {} -- ordered list of known demon entries from ns.Data.demons
 
 function ns:ScanSpells()
@@ -74,6 +148,7 @@ function ns:ScanSpells()
 
 	ns.hasFelDomination = IsKnown(ns.Data.felDomination)
 	ns.hasRitual = IsKnown(ns.Data.ritualOfSummoning)
+	ns.hasPortal = ns.Data.portalOfSummoning and IsKnown(ns.Data.portalOfSummoning) or false
 end
 
 -- Bag scan ----------------------------------------------------------------------
@@ -104,6 +179,15 @@ local function Classify(itemID)
 	if entry then return entry.family, entry.rank end
 end
 
+local SOUL_BAG = 0x0004 -- bag family flag for soul bags
+
+local function IsSoulBag(bag)
+	if bag == 0 then return false end
+	local _, family = C_Container.GetContainerNumFreeSlots(bag)
+	family = ns.Safe(family)
+	return family and bit.band(family, SOUL_BAG) ~= 0 or false
+end
+
 ns.shards = 0
 ns.stones = {} -- family -> { itemID, rank, count, bag, slot }
 
@@ -130,11 +214,14 @@ function ns:ScanBags()
 	for _, stone in pairs(stones) do
 		stone.count = C_Item.GetItemCount(stone.itemID)
 	end
+	if ns.shards and shards > ns.shards and ns.sessionShards then
+		ns.sessionShards = ns.sessionShards + (shards - ns.shards)
+	end
 	ns.shards, ns.stones = shards, stones
 end
 
--- Finds every bag slot holding a soul shard, highest bag/slot first so deletions
--- take shards from the end of the bags.
+-- Every bag slot holding a soul shard, last bag/slot first so deletions take
+-- shards from the end of the bags.
 function ns:ShardSlots()
 	local slots = {}
 	for bag = NUM_BAG_SLOTS, 0, -1 do
@@ -148,6 +235,36 @@ function ns:ShardSlots()
 	return slots
 end
 
+-- Moves one stray shard into a soul bag per bag update; the next BAG_UPDATE_DELAYED
+-- moves the next one, which keeps us clear of item locks.
+function ns:SortShards()
+	if not ns.db.sortShards or InCombatLockdown() or CursorHasItem() then return end
+	local target
+	for bag = 1, NUM_BAG_SLOTS do
+		if IsSoulBag(bag) then
+			for slot = 1, C_Container.GetContainerNumSlots(bag) do
+				if not C_Container.GetContainerItemInfo(bag, slot) then
+					target = { bag = bag, slot = slot }
+					break
+				end
+			end
+		end
+		if target then break end
+	end
+	if not target then return end
+	for _, pos in ipairs(ns:ShardSlots()) do
+		if not IsSoulBag(pos.bag) then
+			local info = C_Container.GetContainerItemInfo(pos.bag, pos.slot)
+			if info and not ns.Safe(info.isLocked) then
+				C_Container.PickupContainerItem(pos.bag, pos.slot)
+				C_Container.PickupContainerItem(target.bag, target.slot)
+				ClearCursor()
+			end
+			return
+		end
+	end
+end
+
 -- Main hand temporary enchant (Firestone/Spellstone in Forever).
 function ns:WeaponEnchantState()
 	local enchants = C_Item.GetWeaponEnchantInfo(Enum.WeaponSlot.MainHand)
@@ -157,6 +274,18 @@ function ns:WeaponEnchantState()
 		if has and left and (not best or left > best) then best = left end
 	end
 	return best and best / 1000 or nil -- seconds left, or nil when none
+end
+
+-- True when the player has none of the given spell IDs as an aura. Only meaningful
+-- out of combat, where aura data isn't secret; returns nil when it can't tell.
+function ns:MissingAura(spellIDs)
+	if InCombatLockdown() then return nil end
+	for _, id in ipairs(spellIDs) do
+		local aura = C_UnitAuras.GetPlayerAuraBySpellID(id)
+		if issecretvalue(aura) then return nil end
+		if aura then return false end
+	end
+	return true
 end
 
 -- Combat-safe update scheduling -----------------------------------------------
@@ -171,6 +300,16 @@ function ns:Refresh()
 	if ns.UpdateVisuals then ns:UpdateVisuals() end
 	if ns.UpdateDataText then ns:UpdateDataText() end
 	ns:CheckShardCap()
+	ns:SortShards()
+end
+
+-- Marks secure state stale; it's rebuilt now, or when combat ends.
+function ns:RequestSecureUpdate()
+	if InCombatLockdown() then
+		ns.secureDirty = true
+	elseif ns.UpdateSecure then
+		ns:UpdateSecure()
+	end
 end
 
 -- Shard cap ---------------------------------------------------------------------
@@ -187,7 +326,7 @@ StaticPopupDialogs.GRIMOIRE_DELETE_SHARDS = {
 }
 
 function ns:CheckShardCap()
-	local cap = GrimoireDB and GrimoireDB.shardCap or 0
+	local cap = ns.db and ns.db.shardCap or 0
 	if cap <= 0 or InCombatLockdown() then return end
 	local extra = ns.shards - cap
 	if extra <= 0 then
@@ -215,7 +354,7 @@ function ns:DeleteShards(count)
 	ClearCursor()
 end
 
--- Healthstone upgrade (delete the outdated stone) ------------------------------
+-- Stone upgrade (delete the outdated stone) ------------------------------------
 
 StaticPopupDialogs.GRIMOIRE_DELETE_STONE = {
 	text = "Grimoire: delete your outdated %s so you can make a new one?",
@@ -274,120 +413,104 @@ function ns:PlaceHealthstoneInTrade()
 	ClearCursor()
 end
 
--- Soulstone / ritual bookkeeping -------------------------------------------------
+-- Units ------------------------------------------------------------------------
 
-local function SafeUnitName(unit)
+function ns.SafeUnitName(unit)
 	if not UnitExists(unit) then return end
 	return ns.Safe(UnitName(unit))
 end
 
 function ns:SoulstoneTargetName()
 	if UnitExists("mouseover") and UnitCanAssist("player", "mouseover") and not UnitIsDead("mouseover") then
-		return SafeUnitName("mouseover")
+		return ns.SafeUnitName("mouseover")
 	elseif UnitExists("target") and UnitCanAssist("player", "target") and not UnitIsDead("target") then
-		return SafeUnitName("target")
+		return ns.SafeUnitName("target")
 	end
-	return SafeUnitName("player")
+	return ns.SafeUnitName("player")
 end
 
-function ns:NoteSoulstoneClick()
-	ns.pendingSoulstone = { name = ns:SoulstoneTargetName(), time = GetTime() }
-end
-
-function ns:NoteRitualClick()
-	ns.pendingRitual = { name = SafeUnitName("target"), time = GetTime() }
-end
-
-local function ChatChannel()
+function ns.GroupChannel()
 	if IsInRaid() then return "RAID" end
 	if IsInGroup() then return "PARTY" end
 end
 
-local function OnPlayerCast(event, spellID)
-	spellID = ns.Safe(spellID)
-	local now = GetTime()
-
-	local ritual = ns.pendingRitual
-	if event == "UNIT_SPELLCAST_START" and ritual and now - ritual.time < 2
-		and (spellID == nil or spellID == ns.Data.ritualOfSummoning) then
-		ns.pendingRitual = nil
-		local channel = ChatChannel()
-		if GrimoireDB.summonAnnounce and channel and ritual.name then
-			local msg = GrimoireDB.summonMessage:gsub("%%t", ritual.name)
-			C_ChatInfo.SendChatMessage(msg, channel)
-		end
-	end
-
-	local ss = ns.pendingSoulstone
-	if event == "UNIT_SPELLCAST_SUCCEEDED" and ss and now - ss.time < 3 then
-		local name = spellID and C_Spell.GetSpellName(spellID)
-		if spellID == nil or (name and name:find(ns.Data.soulstoneKeyword)) then
-			ns.pendingSoulstone = nil
-			GrimoireCharDB.lastSoulstone = { name = ss.name, time = time() }
-			if ns.UpdateVisuals then ns:UpdateVisuals() end
-		end
-	end
-end
-
 -- Events --------------------------------------------------------------------------
 
-Grimoire:SetScript("OnEvent", function(self, event, ...)
-	if event == "PLAYER_LOGIN" then
-		local _, class = UnitClass("player")
-		if class ~= "WARLOCK" then
-			self:UnregisterAllEvents()
-			return
-		end
-		GrimoireDB = CopyDefaults(ns.defaults, GrimoireDB or {})
-		GrimoireCharDB = GrimoireCharDB or {}
-		ns.db = GrimoireDB
-		BuildIndex()
-		ns:ScanSpells()
-		ns:ScanBags()
-		ns:CreateBar()
-		if ns.SetupOptions then ns:SetupOptions() end
-		if ns.SetupElvUI then ns:SetupElvUI() end
+local function OnLogin()
+	local _, class = UnitClass("player")
+	if class ~= "WARLOCK" then
+		Grimoire:UnregisterAllEvents()
+		return
+	end
+	GrimoireDB = CopyDefaults(ns.defaults, GrimoireDB or {})
+	GrimoireCharDB = GrimoireCharDB or {}
+	ns.db = GrimoireDB
+	ns.char = GrimoireCharDB
+	ns.sessionShards = 0
+	BuildIndex()
+	ns:ScanSpells()
+	ns:ScanBags()
+	ns:CreateBar()
+	for _, init in ipairs(ns.modules or {}) do init() end
+	if ns.SetupOptions then ns:SetupOptions() end
+	if ns.SetupElvUI then ns:SetupElvUI() end
 
-		self:RegisterEvent("PLAYER_ENTERING_WORLD")
-		self:RegisterEvent("BAG_UPDATE_DELAYED")
-		self:RegisterEvent("BAG_UPDATE_COOLDOWN")
-		self:RegisterEvent("SPELLS_CHANGED")
-		self:RegisterEvent("PLAYER_REGEN_ENABLED")
-		self:RegisterEvent("PLAYER_REGEN_DISABLED")
-		self:RegisterEvent("TRADE_SHOW")
-		self:RegisterUnitEvent("UNIT_INVENTORY_CHANGED", "player")
-		self:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
-		self:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-		self:RegisterUnitEvent("UNIT_PET", "player")
-		ns:Refresh()
-	elseif event == "SPELLS_CHANGED" then
-		ns:ScanSpells()
-		ns:Refresh()
-	elseif event == "PLAYER_ENTERING_WORLD" or event == "BAG_UPDATE_DELAYED" then
-		ns:Refresh()
-	elseif event == "PLAYER_REGEN_ENABLED" then
-		if ns.secureDirty then
-			ns.secureDirty = nil
-			ns:UpdateSecure()
+	ns.ready = true
+	for event in pairs(handlers) do
+		if unitEvents[event] then
+			Grimoire:RegisterUnitEvent(event, "player")
+		else
+			Grimoire:RegisterEvent(event)
 		end
-		ns:Refresh()
-	elseif event == "PLAYER_REGEN_DISABLED" then
-		if ns.CloseFlyout then ns:CloseFlyout() end
-	elseif event == "TRADE_SHOW" then
-		if ns.pendingTrade and GetTime() - ns.pendingTrade < 10 then
-			ns.pendingTrade = nil
-			ns:PlaceHealthstoneInTrade()
-		end
-	elseif event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_SUCCEEDED" then
-		local _, _, spellID = ...
-		OnPlayerCast(event, spellID)
-	else -- BAG_UPDATE_COOLDOWN, UNIT_INVENTORY_CHANGED, UNIT_PET
-		if ns.UpdateVisuals then ns:UpdateVisuals() end
+	end
+	ns:Refresh()
+end
+
+-- Modules add an init function that runs once the bar exists.
+function ns:Module(init)
+	ns.modules = ns.modules or {}
+	table.insert(ns.modules, init)
+end
+
+ns:On("SPELLS_CHANGED", function()
+	ns:ScanSpells()
+	ns:Refresh()
+end)
+ns:On("PLAYER_ENTERING_WORLD", function() ns:Refresh() end)
+ns:On("BAG_UPDATE_DELAYED", function() ns:Refresh() end)
+ns:On("PLAYER_REGEN_ENABLED", function()
+	if ns.secureDirty then
+		ns.secureDirty = nil
+		ns:UpdateSecure()
+	end
+	ns:Refresh()
+end)
+ns:On("PLAYER_REGEN_DISABLED", function()
+	if ns.CloseMenus then ns:CloseMenus() end
+end)
+ns:On("TRADE_SHOW", function()
+	if ns.pendingTrade and GetTime() - ns.pendingTrade < 10 then
+		ns.pendingTrade = nil
+		ns:PlaceHealthstoneInTrade()
+	end
+end)
+local function Visuals() if ns.UpdateVisuals then ns:UpdateVisuals() end end
+ns:On("BAG_UPDATE_COOLDOWN", Visuals)
+ns:On("UNIT_INVENTORY_CHANGED", Visuals)
+ns:On("UNIT_PET", Visuals)
+ns:On("UPDATE_BINDINGS", Visuals)
+
+Grimoire:SetScript("OnEvent", function(_, event, ...)
+	if event == "PLAYER_LOGIN" then
+		OnLogin()
+	else
+		Dispatch(event, ...)
 	end
 end)
 Grimoire:RegisterEvent("PLAYER_LOGIN")
 
--- Weapon enchants have no event when they expire, so poll the glow cheaply.
+-- Weapon enchants and the armor reminder have no reliable event, so poll cheaply.
 C_Timer.NewTicker(5, function()
 	if ns.UpdateWeaponGlow then ns:UpdateWeaponGlow() end
+	if ns.UpdateArmorGlow then ns:UpdateArmorGlow() end
 end)

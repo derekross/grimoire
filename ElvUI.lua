@@ -9,18 +9,24 @@ local E = unpack(_G.ElvUI)
 local function InsertOptions()
 	local ACH = E.Libs.ACH
 	local group = ACH:Group("|cff9482c9Grimoire|r", nil, 50)
-	group.get = function(info) return ns.db[info[#info]] end
-	group.set = function(info, value) ns:SetOption(info[#info], value) end
 	group.args.header = ACH:Header("Grimoire", 1)
 	for i, opt in ipairs(ns.optionList) do
 		local order = i + 1
-		if opt.type == "toggle" then
-			group.args[opt.key] = ACH:Toggle(opt.name, opt.desc, order)
+		local arg
+		if opt.type == "header" then
+			arg = ACH:Header(opt.name, order)
+		elseif opt.type == "toggle" then
+			arg = ACH:Toggle(opt.name, opt.desc, order)
 		elseif opt.type == "range" then
-			group.args[opt.key] = ACH:Range(opt.name, opt.desc, order, { min = opt.min, max = opt.max, step = opt.step })
+			arg = ACH:Range(opt.name, opt.desc, order, { min = opt.min, max = opt.max, step = opt.step })
 		else
-			group.args[opt.key] = ACH:Input(opt.name, opt.desc, order, nil, "full")
+			arg = ACH:Input(opt.name, opt.desc, order, nil, "full")
 		end
+		if opt.type ~= "header" then
+			arg.get = function() return ns:GetOption(opt) end
+			arg.set = function(_, value) ns:SetOptionValue(opt, value) end
+		end
+		group.args["opt" .. i] = arg
 	end
 	E.Options.args.Grimoire = group
 end
@@ -66,6 +72,7 @@ local function DTOnEnter(panel)
 	DT.tooltip:AddLine("Grimoire")
 	if ns.db then
 		DT.tooltip:AddDoubleLine("Soul Shards", ns.shards, 1, 1, 1, 1, 1, 1)
+		DT.tooltip:AddDoubleLine("Gained this session", ns.sessionShards or 0, 1, 1, 1, 0.6, 1, 0.6)
 		StoneLine(DT.tooltip, "Healthstone", "healthstone")
 		StoneLine(DT.tooltip, "Soulstone", "soulstone")
 		StoneLine(DT.tooltip, "Firestone", "firestone")
@@ -73,7 +80,7 @@ local function DTOnEnter(panel)
 		local left = ns:WeaponEnchantState()
 		DT.tooltip:AddDoubleLine("Weapon stone", left and ("%d min"):format(math.floor(left / 60)) or "none",
 			1, 1, 1, left and 0.6 or 1, left and 1 or 0.3, left and 0.6 or 0.3)
-		local last = GrimoireCharDB.lastSoulstone
+		local last = ns.char.lastSoulstone
 		if last and last.name then
 			DT.tooltip:AddDoubleLine("Last soulstone", ("%s (%d min ago)"):format(last.name, math.floor((time() - last.time) / 60)),
 				1, 1, 1, 1, 0.82, 0)
@@ -97,14 +104,42 @@ end
 
 -- Bar styling, mover, options ---------------------------------------------------
 
+-- Hooks used by the other modules once ElvUI has initialized.
+
+local timerFrames
+
+function ns:SetupTimerMovers(timers, trance)
+	timerFrames = { timers = timers, trance = trance }
+end
+
+function ns.SkinTimerBar(bar)
+	bar:SetStatusBarTexture(E.media.normTex)
+	bar:CreateBackdrop("Transparent")
+	bar.label:FontTemplate(nil, 11)
+	bar.time:FontTemplate(nil, 11)
+end
+
+function ns.SkinSummonQueue(frame)
+	frame:SetBackdrop(nil)
+	frame:SetTemplate("Transparent")
+end
+
+local AB
+
 local function StyleBar()
-	local AB = E:GetModule("ActionBars")
+	AB = E:GetModule("ActionBars")
 	ns.bar:SetTemplate("Transparent")
 	for _, btn in pairs(ns.buttons) do
 		AB:StyleButton(btn, nil, nil, true)
 	end
+	ns.FormatHotkey = function(btn) AB:FixKeybindText(btn) end
 	E:CreateMover(ns.bar, "GrimoireMover", "Grimoire", nil, nil, nil, "ALL,ACTIONBARS", nil, "Grimoire")
+	if timerFrames then
+		E:CreateMover(timerFrames.timers, "GrimoireTimersMover", "Grimoire Timers", nil, nil, nil, "ALL,ACTIONBARS", nil, "Grimoire")
+		E:CreateMover(timerFrames.trance, "GrimoireTranceMover", "Grimoire Shadow Trance", nil, nil, nil, "ALL,ACTIONBARS", nil, "Grimoire")
+	end
 	E.Libs.EP:RegisterPlugin(addonName, InsertOptions)
+	ns:UpdateVisuals()
 end
 
 function ns:SetupElvUI()
