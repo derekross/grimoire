@@ -19,6 +19,10 @@ A warlock helper for **World of Warcraft: Forever**, in the spirit of Necrosis.
 - **Shadow Trance alert** when Nightfall procs.
 - **Chat lines** for soulstones, demon summons and mounts. These go to party/raid only; Blizzard blocks addons from using /say in the open world.
 - **Keybindings** for every button: Key Bindings → AddOns → Grimoire.
+- **Ring layout:** the book in the center with round buttons in a circle around it, like Necrosis. Start angle, size and direction are adjustable. Menus open outward.
+- **Menus** close on their own shortly after the mouse leaves, even in combat. Right-click keeps a menu open (shift-right-click for Curses and Banes).
+- **At a glance:** icons turn blue when you're out of mana and grey when you can't cast them. Menu icons show their mana cost. Tooltips show soul shard costs.
+- **Book display:** soul shards, your soulstone countdown, or mana. Scroll the mouse wheel over the book to switch.
 
 ## ElvUI integration
 

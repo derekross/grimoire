@@ -10,6 +10,7 @@
 
 Data.lua
 Core.lua
+Style.lua
 Buttons.lua
 Speech.lua
 Timers.lua

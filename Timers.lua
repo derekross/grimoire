@@ -13,6 +13,16 @@ local BAR_HEIGHT = 16
 local anchor
 local bars, pool = {}, {}
 
+-- Green with plenty of time left, through yellow, to red as it runs out.
+local function FadeColor(frac)
+	if frac > 0.5 then
+		local f = (frac - 0.5) * 2
+		return 1 - f * 0.8, 0.8, 0.2 * f
+	end
+	local f = frac * 2
+	return 1, 0.2 + f * 0.6, 0
+end
+
 local function FormatTime(sec)
 	if sec >= 60 then return ("%d:%02d"):format(sec / 60, sec % 60) end
 	return ("%.0f"):format(sec)
@@ -36,6 +46,13 @@ local function AcquireBar()
 	bar.label:SetJustifyH("LEFT")
 	bar.time = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	bar.time:SetPoint("RIGHT", -4, 0)
+	bar.spark = bar:CreateTexture(nil, "OVERLAY")
+	bar.spark:SetTexture("Interface\\CastingBar\\UI-CastingBar-Spark")
+	bar.spark:SetBlendMode("ADD")
+	bar.spark:SetSize(12, BAR_HEIGHT * 2)
+	bar.spark:SetPoint("CENTER", bar:GetStatusBarTexture(), "RIGHT")
+	ns.Style.Font(bar.label, 11)
+	ns.Style.Font(bar.time, 11)
 	if ns.SkinTimerBar then ns.SkinTimerBar(bar) end
 	return bar
 end
@@ -66,19 +83,20 @@ local function RemoveBar(bar)
 end
 
 -- id identifies what the bar tracks, so a recast replaces the old bar.
-function ns:StartTimer(id, label, icon, duration, color, opts)
+function ns:StartTimer(id, label, icon, duration, opts)
 	if not anchor then return end
 	for _, b in ipairs(bars) do
 		if b.id == id then RemoveBar(b) break end
 	end
 	local bar = AcquireBar()
 	bar.id = id
-	bar.duration = duration
-	bar.expires = GetTime() + duration
 	bar.opts = opts or {}
+	bar.duration = bar.opts.total or duration -- full length, for timers resumed after a reload
+	bar.expires = GetTime() + duration
 	bar.warned = nil
-	bar:SetMinMaxValues(0, duration)
-	bar:SetStatusBarColor(unpack(color or { 0.58, 0.51, 0.79 }))
+	bar:SetMinMaxValues(0, bar.duration)
+	bar:SetValue(duration)
+	bar:SetStatusBarColor(FadeColor(duration / bar.duration))
 	bar.icon:SetTexture(icon)
 	bar.label:SetText(label)
 	bar:Show()
@@ -108,6 +126,7 @@ local function OnUpdate(_, elapsed)
 		else
 			bar:SetValue(left)
 			bar.time:SetText(FormatTime(left))
+			bar:SetStatusBarColor(FadeColor(left / bar.duration))
 			if bar.opts.warnAt and not bar.warned and left <= bar.opts.warnAt then
 				bar.warned = true
 				bar.opts.onWarn()
@@ -157,8 +176,7 @@ local function OnSucceeded(_, _, castGUID, spellID)
 		opts = { warnAt = 5, onWarn = function() Alert("Banish ends in 5 seconds!") end }
 	end
 	-- Fear and Howl share one bar per target name; Death Coil is short enough to just show.
-	ns:StartTimer("cc:" .. name .. ":" .. (target or ""), label, C_Spell.GetSpellTexture(spellID), duration,
-		entry.subjugate and { 0.2, 0.8, 0.2 } or { 0.58, 0.51, 0.79 }, opts)
+	ns:StartTimer("cc:" .. name .. ":" .. (target or ""), label, C_Spell.GetSpellTexture(spellID), duration, opts)
 end
 
 -- Soulstone ---------------------------------------------------------------------
@@ -169,7 +187,8 @@ function ns:StartSoulstoneTimer()
 	local left = SOULSTONE_DURATION - (time() - last.time)
 	if left <= 0 then return end
 	local icon = C_Item.GetItemIconByID(ns.Data.stones.soulstone[1].item)
-	ns:StartTimer("soulstone", "Soulstone: " .. (last.name or "?"), icon, left, { 0.9, 0.3, 0.9 }, {
+	ns:StartTimer("soulstone", "Soulstone: " .. (last.name or "?"), icon, left, {
+		total = SOULSTONE_DURATION,
 		warnAt = SOULSTONE_WARN,
 		onWarn = function()
 			if not last.warned then
@@ -206,6 +225,7 @@ end
 local trance
 
 local function SetTrance(on)
+	if not trance then return end
 	if not ns.db.shadowTranceAlert then on = false end
 	if on == trance.active then return end
 	trance.active = on
@@ -250,23 +270,51 @@ local function OnAura(_, _, info)
 end
 
 local function CreateTrance()
+	local Style = ns.Style
+	local a = Style.theme.accent
 	trance = CreateFrame("Frame", "GrimoireShadowTrance", UIParent)
-	trance:SetSize(48, 48)
+	trance:SetSize(44, 44)
 	trance:SetPoint("BOTTOM", ns.bar, "TOP", 0, 60)
 	trance:Hide()
+
+	-- Soft accent halo behind a round (ring layout) or square icon, like the bar's glow.
+	local halo = trance:CreateTexture(nil, "BACKGROUND")
+	halo:SetTexture("Interface\\Buttons\\UI-Common-MouseHilight")
+	halo:SetBlendMode("ADD")
+	halo:SetVertexColor(a[1], a[2], a[3])
+	halo:SetPoint("CENTER")
+	halo:SetSize(96, 96)
+
+	local rim = trance:CreateTexture(nil, "BORDER")
+	rim:SetAllPoints()
+	rim:SetColorTexture(Style.theme.border[1], Style.theme.border[2], Style.theme.border[3])
 	local icon = trance:CreateTexture(nil, "ARTWORK")
-	icon:SetAllPoints()
+	icon:SetPoint("TOPLEFT", 2, -2)
+	icon:SetPoint("BOTTOMRIGHT", -2, 2)
 	icon:SetTexture(C_Spell.GetSpellTexture(ns.Data.shadowTrance) or 136223)
 	icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-	local text = trance:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-	text:SetPoint("TOP", trance, "BOTTOM", 0, -2)
-	text:SetText("Shadow Trance!")
+	if Style.IsRound() then
+		for _, tex in ipairs({ rim, icon }) do
+			local mask = trance:CreateMaskTexture()
+			mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+			mask:SetAllPoints(tex)
+			tex:AddMaskTexture(mask)
+		end
+	end
+
+	local text = trance:CreateFontString(nil, "OVERLAY")
+	Style.Font(text, 14)
+	text:SetPoint("TOP", trance, "BOTTOM", 0, -4)
+	text:SetText("Shadow Trance")
+	text:SetTextColor(a[1], a[2], a[3])
+
 	local anim = trance:CreateAnimationGroup()
 	anim:SetLooping("BOUNCE")
 	local pulse = anim:CreateAnimation("Alpha")
 	pulse:SetFromAlpha(1)
-	pulse:SetToAlpha(0.4)
-	pulse:SetDuration(0.4)
+	pulse:SetToAlpha(0.5)
+	pulse:SetDuration(0.5)
+	pulse:SetSmoothing("IN_OUT")
 	trance.anim = anim
 end
 

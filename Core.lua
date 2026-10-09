@@ -15,6 +15,13 @@ ns.defaults = {
 	buttonSize = 36,
 	spacing = 4,
 	vertical = false,
+	ring = false, -- book in the center, buttons in a circle around it
+	roundButtons = true, -- round buttons in the ring layout
+	ringAngle = 90, -- degrees; 90 = first button at the top
+	ringRadius = 1,
+	ringClockwise = true,
+	menuAutoHide = 2, -- seconds after the mouse leaves an open menu
+	bookMode = "shards", -- shards | soulstone | mana
 	hidden = {}, -- bar button key -> true to hide it
 	shardLow = 3,
 	shardCap = 0, -- 0 = off
@@ -77,6 +84,7 @@ local unitEvents = {
 	UNIT_INVENTORY_CHANGED = true, UNIT_PET = true, UNIT_AURA = true,
 	UNIT_SPELLCAST_SENT = true, UNIT_SPELLCAST_START = true, UNIT_SPELLCAST_SUCCEEDED = true,
 	UNIT_SPELLCAST_FAILED = true, UNIT_SPELLCAST_INTERRUPTED = true,
+	UNIT_POWER_FREQUENT = true, UNIT_MAXPOWER = true,
 }
 
 function ns:On(event, handler)
@@ -451,9 +459,9 @@ local function OnLogin()
 	ns:ScanSpells()
 	ns:ScanBags()
 	ns:CreateBar()
-	for _, init in ipairs(ns.modules or {}) do init() end
 	if ns.SetupOptions then ns:SetupOptions() end
-	if ns.SetupElvUI then ns:SetupElvUI() end
+	-- ElvUI styles the bar once it has initialized; otherwise style it now.
+	if ns.SetupElvUI then ns:SetupElvUI() else ns:ApplyStyle() end
 
 	ns.ready = true
 	for event in pairs(handlers) do
@@ -466,10 +474,17 @@ local function OnLogin()
 	ns:Refresh()
 end
 
--- Modules add an init function that runs once the bar exists.
+-- Modules add an init function that runs once the bar exists and is styled
+-- (so their frames pick up the theme, e.g. ElvUI's fonts).
 function ns:Module(init)
 	ns.modules = ns.modules or {}
 	table.insert(ns.modules, init)
+end
+
+function ns:StartModules()
+	if ns.modulesStarted then return end
+	ns.modulesStarted = true
+	for _, init in ipairs(ns.modules or {}) do init() end
 end
 
 ns:On("SPELLS_CHANGED", function()

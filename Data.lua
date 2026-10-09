@@ -72,7 +72,7 @@ ns.Data = {
 		{ ranks = { 710, 18647 }, durations = { 20, 30 }, banish = true },  -- Banish
 		{ ranks = { 5782, 6213, 6215 }, durations = { 10, 15, 20 } },       -- Fear
 		{ ranks = { 5484, 17928 }, durations = { 10, 15 } },                -- Howl of Terror
-		{ ranks = { 1098, 11725, 11726 }, durations = { 300, 300, 300 }, subjugate = true }, -- Subjugate Demon
+		{ ranks = { 1098, 11725, 11726 }, durations = { 300, 300, 300 }, subjugate = true, shard = true }, -- Subjugate Demon
 		{ ranks = { 6789, 17925, 17926 }, durations = { 3, 3, 3 } },        -- Death Coil
 	},
 	mounts = { 23161, 5784 }, -- Dreadsteed first, then Felsteed
@@ -80,9 +80,9 @@ ns.Data = {
 	-- family = UnitCreatureFamily("pet"), used to show the active demon's icon.
 	demons = {
 		{ spell = 688, family = "Imp" },
-		{ spell = 697, family = "Voidwalker" },
-		{ spell = 712, family = "Succubus" },
-		{ spell = 713, family = "Incubus" },
-		{ spell = 691, family = "Felhunter" },
+		{ spell = 697, family = "Voidwalker", shard = true },
+		{ spell = 712, family = "Succubus", shard = true },
+		{ spell = 713, family = "Incubus", shard = true },
+		{ spell = 691, family = "Felhunter", shard = true },
 	},
 }

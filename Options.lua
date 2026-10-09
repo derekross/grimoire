@@ -27,11 +27,18 @@ end
 ns.optionList = {
 	{ type = "header", name = "Bar" },
 	{ key = "showBar", name = "Show bar", type = "toggle" },
-	{ key = "locked", name = "Lock bar", type = "toggle", desc = "Stops shift-drag moving the bar (ElvUI users move it with /moveui)." },
-	{ key = "vertical", name = "Vertical bar", type = "toggle" },
+	{ key = "locked", name = "Lock bar", type = "toggle", desc = "Stops shift-drag on the book from moving the bar." },
+	{ key = "ring", name = "Ring layout", type = "toggle", desc = "Book in the center with the buttons in a circle around it, like Necrosis." },
+	{ key = "roundButtons", name = "Round buttons in the ring", type = "toggle", desc = "Changing this reloads the UI." },
+	{ key = "ringAngle", name = "Ring start angle", type = "range", min = 0, max = 345, step = 15, desc = "Where the first button sits. 90 is the top." },
+	{ key = "ringRadius", name = "Ring size", type = "range", min = 0.8, max = 1.6, step = 0.05 },
+	{ key = "ringClockwise", name = "Ring runs clockwise", type = "toggle" },
+	{ key = "vertical", name = "Vertical bar", type = "toggle", desc = "Ignored in the ring layout." },
 	{ key = "scale", name = "Scale", type = "range", min = 0.5, max = 2, step = 0.05 },
 	{ key = "buttonSize", name = "Button size", type = "range", min = 24, max = 64, step = 1 },
 	{ key = "spacing", name = "Button spacing", type = "range", min = 0, max = 16, step = 1 },
+	{ key = "menuAutoHide", name = "Menus close after (seconds)", type = "range", min = 1, max = 6, step = 0.5, desc = "How long an open menu stays after the mouse leaves it. Right-click keeps a menu open." },
+	{ key = "bookMode", name = "Book shows", type = "select", values = { shards = "Soul Shards", soulstone = "Soulstone timer", mana = "Mana" }, order = { "shards", "soulstone", "mana" }, desc = "You can also scroll the mouse wheel over the book." },
 
 	{ type = "header", name = "Shards and stones" },
 	{ key = "shardLow", name = "Low shard warning", type = "range", min = 0, max = 10, step = 1, desc = "Shard count turns yellow at or below this." },
@@ -91,6 +98,7 @@ function ns:SetOptionValue(opt, value)
 	t[path[#path]] = value
 	if opt.key == "summonKeywords" and ns.ParseSummonKeywords then ns.ParseSummonKeywords() end
 	ns:ApplySettings()
+	if opt.key == "ring" or opt.key == "roundButtons" then ns.Style.CheckShapeChange() end
 end
 
 -- Applies a changed setting; layout changes wait until combat ends.
@@ -118,6 +126,14 @@ function ns:SetupOptions()
 	for _, opt in ipairs(ns.optionList) do
 		if opt.type == "header" then
 			layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(opt.name))
+		elseif opt.type == "select" then
+			local setting = Settings.RegisterProxySetting(category, "GRIMOIRE_" .. opt.key, Settings.VarType.String, opt.name,
+				ns:GetOption(opt), function() return ns:GetOption(opt) end, function(value) ns:SetOptionValue(opt, value) end)
+			Settings.CreateDropdown(category, setting, function()
+				local container = Settings.CreateControlTextContainer()
+				for _, value in ipairs(opt.order) do container:Add(value, opt.values[value]) end
+				return container:GetData()
+			end, opt.desc)
 		elseif opt.type ~= "input" then
 			local varType = opt.type == "toggle" and Settings.VarType.Boolean or Settings.VarType.Number
 			local default = ns:GetOption(opt)
@@ -154,6 +170,10 @@ SlashCmdList.GRIMOIRE = function(msg)
 		OpenOptions()
 	elseif cmd == "show" or cmd == "hide" then
 		ns:SetOption("showBar", cmd == "show")
+	elseif cmd == "book" and ns.bookModeNames[arg] then
+		ns:SetOption("bookMode", arg)
+	elseif cmd == "ring" or cmd == "bar" then
+		ns:SetOption("ring", cmd == "ring")
 	elseif cmd == "lock" or cmd == "unlock" then
 		ns:SetOption("locked", cmd == "lock")
 	elseif cmd == "cap" and tonumber(arg) then
@@ -174,6 +194,6 @@ SlashCmdList.GRIMOIRE = function(msg)
 		ns.bar:SetPoint(ns.db.point[1], UIParent, ns.db.point[3], ns.db.point[4], ns.db.point[5])
 		ns.Print("Bar position reset.")
 	else
-		ns.Print("/grim [config | show | hide | lock | unlock | cap <n> | msg <text> | keywords <a, b> | queue | reset]")
+		ns.Print("/grim [config | ring | bar | book shards|soulstone|mana | show | hide | lock | unlock | cap <n> | msg <text> | keywords <a, b> | queue | reset]")
 	end
 end

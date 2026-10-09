@@ -2,26 +2,54 @@ local addonName, ns = ...
 
 local C_Item, C_Spell = C_Item, C_Spell
 local InCombatLockdown, GameTooltip = InCombatLockdown, GameTooltip
+local Style = ns.Style
 
 local NOOP = "grimoire_noop" -- secure action type with no handler: the click does nothing secure
 local MENU_TEMPLATE = "SecureActionButtonTemplate, SecureHandlerBaseTemplate"
 local BOOK_ICON = 133737 -- inv_misc_book_05
 local BOOK_SCALE = 1.4
+local RING_BOOK_SCALE = 1.8
+local MAX_ITEMS = 10
 
--- Toggles this button's menu and closes the other menus.
+-- Menu open/close, run in the secure environment so it also works in combat.
+--   open:  auto-hides a moment after the mouse leaves the button and the menu
+--   pin:   stays open until the button is clicked again (right-click on toggle menus,
+--          shift-right-click on Curse/Bane menus whose right-click picks a spell)
+--   other menus close when one opens
 local TOGGLE_MENU = [[
 	local menu = self:GetFrameRef("menu")
-	local show = not menu:IsShown()
+	local pin = button == "RightButton" and (self:GetAttribute("pinmode") == "right" or IsShiftKeyDown())
+	if menu:IsShown() then
+		if pin and not menu:GetAttribute("pinned") then
+			menu:SetAttribute("pinned", true)
+			menu:UnregisterAutoHide()
+		else
+			menu:Hide()
+		end
+		return
+	end
 	for i = 1, 8 do
 		local other = self:GetFrameRef("menu" .. i)
 		if not other then break end
 		other:Hide()
 	end
-	if show then menu:Show() else menu:Hide() end
+	menu:SetAttribute("pinned", pin)
+	menu:Show()
+	if not pin then
+		menu:RegisterAutoHide(self:GetAttribute("autohide"))
+		menu:AddToAutoHide(self)
+		for i = 1, 10 do
+			local item = self:GetFrameRef("item" .. i)
+			if not item then break end
+			if item:IsShown() then menu:AddToAutoHide(item) end
+		end
+	end
 ]]
-local MENU_AUTOCLOSE = 1.5 -- seconds after the mouse leaves an open menu (out of combat only)
 local MENU_PRE = [[ return nil, true ]] -- keep the click, then run the post body
-local MENU_CLOSE = [[ owner:GetFrameRef("menu"):Hide() ]]
+local MENU_CLOSE = [[
+	local menu = owner:GetFrameRef("menu")
+	if not menu:GetAttribute("pinned") then menu:Hide() end
+]]
 
 local bar
 local buttons = {}
@@ -56,15 +84,7 @@ local function SpellIcon(spellID)
 end
 
 local function SetGlow(btn, on)
-	if on then
-		if not btn.glow.anim:IsPlaying() then
-			btn.glow:Show()
-			btn.glow.anim:Play()
-		end
-	elseif btn.glow:IsShown() then
-		btn.glow.anim:Stop()
-		btn.glow:Hide()
-	end
+	Style.SetGlow(btn, on)
 end
 ns.SetGlow = SetGlow
 
@@ -89,6 +109,33 @@ local function SetSpellCooldown(btn, spellID)
 	SetCooldown(btn, info.startTime, info.duration)
 end
 
+-- Tint only for reasons the player can act on: blue when out of mana, grey when the
+-- spell needs a soul shard and there are none. The game's general "not usable" flag
+-- also covers things like an armor that's already on, which would grey out spells
+-- that can be cast. Keeps the last state when the answer is secret (in combat).
+local function UpdateUsable(btn, spellID, needsShard)
+	if not spellID then return Style.SetUsable(btn, nil) end
+	if needsShard and ns.shards == 0 then return Style.SetUsable(btn, "unusable") end
+	local _, noPower = C_Spell.IsSpellUsable(spellID)
+	noPower = ns.Safe(noPower)
+	if noPower == nil then return end
+	Style.SetUsable(btn, noPower and "nopower" or nil)
+end
+
+-- Mana cost of a spell, or nil.
+local function ManaCost(spellID)
+	local costs = spellID and C_Spell.GetSpellPowerCost(spellID)
+	for _, cost in ipairs(costs or {}) do
+		if ns.Safe(cost.type) == Enum.PowerType.Mana then return ns.Safe(cost.cost) end
+	end
+end
+
+local function FormatCost(cost)
+	if not cost or cost <= 0 then return "" end
+	if cost >= 1000 then return ("%.1fk"):format(cost / 1000) end
+	return tostring(cost)
+end
+
 local function OnLeave()
 	GameTooltip:Hide()
 end
@@ -98,18 +145,26 @@ local function TooltipAnchor(btn)
 end
 
 local function AddHint(text)
-	GameTooltip:AddLine(text, 0.6, 0.8, 1)
+	GameTooltip:AddLine(text, 0.5, 0.5, 0.5)
+end
+
+-- "Soul Shards: N" for spells that use one; red when you have none.
+local function AddShardLine(needsShard)
+	if not needsShard then return end
+	local r, g, b = 1, 1, 1
+	if ns.shards == 0 then r, g, b = 1, 0.27, 0.27 end
+	GameTooltip:AddDoubleLine("Soul Shards", ns.shards, 0.7, 0.7, 0.7, r, g, b)
 end
 
 -- Button factory -------------------------------------------------------------
 
-local function CreateButton(key, template, parent)
+local function CreateButton(key, template, parent, withCost)
 	local name = "Grimoire" .. key .. "Button"
 	local btn = CreateFrame("Button", name, parent or bar, template)
 	btn.key = key
 	btn.binding = "CLICK " .. name .. ":LeftButton"
 
-	btn.icon = btn:CreateTexture(name .. "Icon", "BACKGROUND")
+	btn.icon = btn:CreateTexture(name .. "Icon", "ARTWORK")
 	btn.icon:SetAllPoints()
 	btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
@@ -120,31 +175,9 @@ local function CreateButton(key, template, parent)
 	btn.Count:SetPoint("BOTTOMRIGHT", -2, 2)
 	btn.HotKey = btn:CreateFontString(name .. "HotKey", "OVERLAY", "NumberFontNormalSmallGray")
 	btn.HotKey:SetPoint("TOPRIGHT", -2, -2)
-
-	local glow = btn:CreateTexture(nil, "OVERLAY")
-	glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
-	glow:SetBlendMode("ADD")
-	glow:SetVertexColor(0.58, 0.51, 0.79) -- warlock purple
-	glow:SetPoint("CENTER")
-	glow:Hide()
-	local anim = glow:CreateAnimationGroup()
-	anim:SetLooping("BOUNCE")
-	local alpha = anim:CreateAnimation("Alpha")
-	alpha:SetFromAlpha(1)
-	alpha:SetToAlpha(0.3)
-	alpha:SetDuration(0.6)
-	glow.anim = anim
-	btn.glow = glow
-
-	if not ns.useElvUI then
-		local border = CreateFrame("Frame", nil, btn, "BackdropTemplate")
-		border:SetPoint("TOPLEFT", -1, 1)
-		border:SetPoint("BOTTOMRIGHT", 1, -1)
-		border:SetFrameLevel(btn:GetFrameLevel())
-		border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-		border:SetBackdropBorderColor(0, 0, 0)
-		btn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-		btn:SetPushedTexture("Interface\\Buttons\\UI-Quickslot-Depress")
+	if withCost then
+		btn.cost = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+		btn.cost:SetPoint("BOTTOM", 0, 2)
 	end
 
 	if template and template:find("SecureActionButtonTemplate") then
@@ -164,6 +197,7 @@ local function StoneTooltip(btn, family, hints)
 		GameTooltip:SetItemByID(item)
 	elseif known then
 		GameTooltip:SetSpellByID(known.spellID)
+		AddShardLine(true)
 	else
 		GameTooltip:AddLine(btn.title)
 		GameTooltip:AddLine("Not learned yet.", 1, 0.3, 0.3)
@@ -188,10 +222,13 @@ local function CreateMenu(key, entries, mode, opts)
 	main.mode = mode
 	main.entries = entries
 	main:SetAttribute("_grimoiremenu", TOGGLE_MENU)
+	main:SetAttribute("autohide", ns.db.menuAutoHide)
 	if mode == "toggle" then
 		main:SetAttribute("type", "grimoiremenu")
+		main:SetAttribute("pinmode", "right")
 	else
 		main:SetAttribute("type2", "grimoiremenu")
+		main:SetAttribute("pinmode", "shiftright")
 	end
 
 	local flyout = CreateFrame("Frame", "Grimoire" .. key .. "Menu", main, "SecureHandlerShowHideTemplate")
@@ -200,41 +237,19 @@ local function CreateMenu(key, entries, mode, opts)
 	main.flyout = flyout
 	main.items = {}
 
-	-- Close once the mouse has been away from the button and the menu for a moment.
-	-- Hiding a secure frame is blocked in combat, where a second click closes it instead.
-	local away = 0
-	flyout:HookScript("OnShow", function() away = 0 end)
-	flyout:SetScript("OnUpdate", function(self, elapsed)
-		if InCombatLockdown() then return end
-		local over = main:IsMouseOver()
-		for _, b in ipairs(main.items) do
-			if b:IsShown() and b:IsMouseOver() then over = true break end
-		end
-		away = over and 0 or away + elapsed
-		if away > MENU_AUTOCLOSE then self:Hide() end
-	end)
-
 	for i, entry in ipairs(entries) do
-		local b = CreateButton(key .. i, "SecureActionButtonTemplate", flyout)
+		if i > MAX_ITEMS then break end
+		local b = CreateButton(key .. i, "SecureActionButtonTemplate", flyout, not opts.demon)
 		b.entry = entry
 		b.index = i
-		if opts.demon then
-			b:SetAttribute("type", "macro")
-		else
-			b:SetAttribute("type", "spell")
-		end
+		b:SetAttribute("type", opts.demon and "macro" or "spell")
 		b:SetScript("OnEnter", function(btn)
 			TooltipAnchor(btn)
-			local spell = btn.spellID
-			if spell then GameTooltip:SetSpellByID(spell) end
-			if mode == "default" then
-				GameTooltip:AddLine(" ")
-				AddHint("Click: cast and make it the default")
-			end
-			if opts.demon and ns.hasFelDomination then
-				GameTooltip:AddLine(" ")
-				AddHint("Shift-click: Fel Domination first")
-			end
+			if btn.spellID then GameTooltip:SetSpellByID(btn.spellID) end
+			AddShardLine(entry.shard)
+			GameTooltip:AddLine(" ")
+			if mode == "default" then AddHint("Click: cast and make it the default") end
+			if opts.demon and ns.hasFelDomination then AddHint("Shift-click: Fel Domination first") end
 			GameTooltip:Show()
 		end)
 		if mode == "default" then
@@ -245,12 +260,8 @@ local function CreateMenu(key, entries, mode, opts)
 				ns:UpdateVisuals()
 			end)
 		end
-		if opts.onClick then
-			b:HookScript("PostClick", function(btn, mouse, down)
-				if not down then opts.onClick(btn, mouse) end
-			end)
-		end
 		SecureHandlerWrapScript(b, "OnClick", main, MENU_PRE, MENU_CLOSE)
+		main:SetFrameRef("item" .. i, b)
 		main.items[i] = b
 	end
 
@@ -263,10 +274,10 @@ local function MenuDefault(main)
 	local pick = ns.db.defaults[main.key]
 	local entry = pick and main.entries[pick]
 	local spell = entry and ns.BestSpell(entry)
-	if spell then return spell end
+	if spell then return spell, entry end
 	for _, e in ipairs(main.entries) do
 		spell = ns.BestSpell(e)
-		if spell then return spell end
+		if spell then return spell, e end
 	end
 end
 
@@ -276,6 +287,127 @@ local function KnownCount(main)
 		if b.spellID then n = n + 1 end
 	end
 	return n
+end
+
+-- Book ---------------------------------------------------------------------------
+
+local BOOK_MODES = { "shards", "soulstone", "mana" }
+local BOOK_MODE_NAMES = { shards = "Soul Shards", soulstone = "Soulstone timer", mana = "Mana" }
+ns.bookModes, ns.bookModeNames = BOOK_MODES, BOOK_MODE_NAMES
+
+local function SoulstoneLeft()
+	local last = ns.char.lastSoulstone
+	if not (last and last.time) then return end
+	local left = 30 * 60 - (time() - last.time)
+	return left > 0 and left or nil
+end
+
+function ns:UpdateBook()
+	local book = buttons.Book
+	if not book or not book.fill then return end
+	local mode = ns.db.bookMode
+	local fill, text = book.fill, book.Count
+	local a = Style.theme.accent
+	if mode == "mana" then
+		local m = Style.theme.mana
+		Style.SetFillColor(fill, m[1], m[2], m[3])
+		fill:SetMinMaxValues(0, UnitPowerMax("player", Enum.PowerType.Mana))
+		fill:SetValue(UnitPower("player", Enum.PowerType.Mana))
+		-- Secret in combat; the widgets accept secret values, so the display keeps working.
+		text:SetFormattedText("%d%%", UnitPowerPercent("player", Enum.PowerType.Mana, true, CurveConstants.ScaleTo100))
+		text:SetTextColor(1, 1, 1)
+	elseif mode == "soulstone" then
+		local left = SoulstoneLeft()
+		Style.SetFillColor(fill, 0.85, 0.35, 0.85)
+		fill:SetMinMaxValues(0, 30 * 60)
+		fill:SetValue(left or 0)
+		if not left then
+			text:SetText("-")
+			text:SetTextColor(0.6, 0.6, 0.6)
+		elseif left >= 60 then
+			text:SetFormattedText("%dm", math.ceil(left / 60))
+			if left < 300 then text:SetTextColor(1, 0.82, 0) else text:SetTextColor(1, 1, 1) end
+		else
+			text:SetFormattedText("%ds", left)
+			text:SetTextColor(1, 0.27, 0.27)
+		end
+	else
+		local full = ns.db.shardCap > 0 and ns.db.shardCap or 20
+		Style.SetFillColor(fill, a[1], a[2], a[3])
+		fill:SetMinMaxValues(0, full)
+		fill:SetValue(math.min(ns.shards, full))
+		text:SetText(ns.shards)
+		if ns.shards == 0 then
+			text:SetTextColor(1, 0.27, 0.27)
+		elseif ns.shards <= ns.db.shardLow then
+			text:SetTextColor(1, 0.82, 0)
+		else
+			text:SetTextColor(1, 1, 1)
+		end
+	end
+	SetGlow(book, ns.db.shardCap > 0 and ns.shards > ns.db.shardCap)
+end
+
+function ns:CycleBookMode(delta)
+	local index = 1
+	for i, m in ipairs(BOOK_MODES) do
+		if m == ns.db.bookMode then index = i end
+	end
+	index = (index - 1 + delta) % #BOOK_MODES + 1
+	ns.db.bookMode = BOOK_MODES[index]
+	ns:UpdateBook()
+end
+
+local function StoneSummary(label, family)
+	local stone, known = ns.stones[family], ns.known[family]
+	if not known and not stone then return end
+	if stone then
+		local name = C_Item.GetItemNameByID(stone.itemID) or label
+		local extra = ns:IsOutdated(family) and " |cff33ff33(upgrade)|r" or ""
+		GameTooltip:AddDoubleLine(label, name .. (stone.count > 1 and (" x" .. stone.count) or "") .. extra,
+			0.7, 0.7, 0.7, 1, 1, 1)
+	else
+		GameTooltip:AddDoubleLine(label, "none", 0.7, 0.7, 0.7, 1, 0.27, 0.27)
+	end
+end
+
+local function BookTooltip(btn)
+	TooltipAnchor(btn)
+	local a = Style.theme.accent
+	GameTooltip:AddLine("Grimoire", a[1], a[2], a[3])
+	AddShardLine(true)
+	GameTooltip:AddDoubleLine("Gained this session", ns.sessionShards or 0, 0.7, 0.7, 0.7, 0.6, 1, 0.6)
+	if ns.db.shardCap > 0 then GameTooltip:AddDoubleLine("Cap", ns.db.shardCap, 0.7, 0.7, 0.7, 1, 1, 1) end
+	GameTooltip:AddLine(" ")
+	StoneSummary("Healthstone", "healthstone")
+	StoneSummary("Soulstone", "soulstone")
+	StoneSummary("Firestone", "firestone")
+	StoneSummary("Spellstone", "spellstone")
+	local left = ns:WeaponEnchantState()
+	if ns.known.firestone or ns.known.spellstone then
+		if left then
+			GameTooltip:AddDoubleLine("Weapon", ("%d min"):format(math.floor(left / 60)), 0.7, 0.7, 0.7, 1, 1, 1)
+		else
+			GameTooltip:AddDoubleLine("Weapon", "no stone", 0.7, 0.7, 0.7, 1, 0.27, 0.27)
+		end
+	end
+	local last, ssLeft = ns.char.lastSoulstone, SoulstoneLeft()
+	if last and last.name and ssLeft then
+		GameTooltip:AddDoubleLine("Soulstoned", ("%s (%dm left)"):format(last.name, math.ceil(ssLeft / 60)),
+			0.7, 0.7, 0.7, 0.85, 0.5, 0.85)
+	end
+	local pet = UnitExists("pet") and ns.Safe(UnitCreatureFamily("pet"))
+	if pet then GameTooltip:AddDoubleLine("Demon", pet, 0.7, 0.7, 0.7, 1, 1, 1) end
+	GameTooltip:AddLine(" ")
+	if ns.db.shardCap > 0 and ns.shards > ns.db.shardCap then
+		AddHint("Left-click: delete extra shards")
+	elseif ns.db.summonQueue then
+		AddHint("Left-click: summon queue")
+	end
+	AddHint("Mouse wheel: shards / soulstone / mana")
+	AddHint("Right-click: options")
+	if not ns.db.locked then AddHint("Shift-drag: move") end
+	GameTooltip:Show()
 end
 
 -- Bar --------------------------------------------------------------------------
@@ -291,22 +423,17 @@ function ns:CreateBar()
 	bar:SetPoint(p[1], UIParent, p[3], p[4], p[5])
 	ns.bar = bar
 
-	-- The grimoire: shard count, filling with fel light as shards accumulate.
+	-- The grimoire. Its fill and center text show shards, the soulstone timer or mana.
 	local book = CreateButton("Book")
 	book.title = ns.buttonTitles.Book
 	book.binding = nil
 	book.icon:SetTexture(BOOK_ICON)
-	book.fill = book:CreateTexture(nil, "ARTWORK")
-	book.fill:SetTexture("Interface\\Buttons\\WHITE8x8")
-	book.fill:SetBlendMode("ADD")
-	book.fill:SetGradient("VERTICAL", CreateColor(0.55, 0.2, 0.9, 0.55), CreateColor(0.3, 1, 0.3, 0.15))
-	book.fill:SetPoint("BOTTOMLEFT")
-	book.fill:SetPoint("BOTTOMRIGHT")
-	book.Count:SetFontObject("NumberFontNormalLarge")
 	book.Count:ClearAllPoints()
-	book.Count:SetPoint("CENTER", 0, -2)
+	book.Count:SetPoint("CENTER", 0, -1)
 	book:RegisterForClicks("AnyUp")
 	book:RegisterForDrag("LeftButton")
+	book:EnableMouseWheel(true)
+	book:SetScript("OnMouseWheel", function(_, delta) ns:CycleBookMode(delta > 0 and 1 or -1) end)
 	book:SetScript("OnClick", function(_, mouse)
 		if mouse == "RightButton" then
 			SlashCmdList.GRIMOIRE("")
@@ -317,34 +444,24 @@ function ns:CreateBar()
 			ns:ToggleSummonQueue()
 		end
 	end)
-	book:SetScript("OnDragStart", function()
-		if IsShiftKeyDown() and not ns.db.locked and not InCombatLockdown() and not ns.useElvUI then
-			bar:StartMoving()
+	-- Shift-drag moves the bar (under ElvUI, its mover, so the spot is saved in the profile).
+	book:SetScript("OnDragStart", function(btn)
+		if not IsShiftKeyDown() or ns.db.locked or InCombatLockdown() then return end
+		btn.dragging = true
+		if ns.StartDrag then ns.StartDrag() else bar:StartMoving() end
+	end)
+	book:SetScript("OnDragStop", function(btn)
+		if not btn.dragging then return end
+		btn.dragging = nil
+		if ns.StopDrag then
+			ns.StopDrag()
+		else
+			bar:StopMovingOrSizing()
+			local point, _, relPoint, x, y = bar:GetPoint()
+			ns.db.point = { point, "UIParent", relPoint, x, y }
 		end
 	end)
-	book:SetScript("OnDragStop", function()
-		bar:StopMovingOrSizing()
-		local point, _, relPoint, x, y = bar:GetPoint()
-		ns.db.point = { point, "UIParent", relPoint, x, y }
-	end)
-	book:SetScript("OnEnter", function(btn)
-		TooltipAnchor(btn)
-		GameTooltip:AddLine("Grimoire")
-		GameTooltip:AddDoubleLine("Soul Shards", ns.shards, 1, 1, 1, 1, 1, 1)
-		GameTooltip:AddDoubleLine("Gained this session", ns.sessionShards or 0, 1, 1, 1, 0.6, 1, 0.6)
-		if ns.db.shardCap > 0 then
-			GameTooltip:AddDoubleLine("Cap", ns.db.shardCap, 1, 1, 1, 1, 1, 1)
-		end
-		GameTooltip:AddLine(" ")
-		if ns.db.shardCap > 0 and ns.shards > ns.db.shardCap then
-			AddHint("Left-click: delete extra shards")
-		elseif ns.db.summonQueue then
-			AddHint("Left-click: show/hide the summon queue")
-		end
-		AddHint("Right-click: options")
-		if not ns.useElvUI then AddHint("Shift-drag: move the bar") end
-		GameTooltip:Show()
-	end)
+	book:SetScript("OnEnter", BookTooltip)
 
 	-- Healthstone
 	local hs = CreateButton("Healthstone", "SecureActionButtonTemplate")
@@ -385,11 +502,11 @@ function ns:CreateBar()
 		local hints = { StoneItem("soulstone") and "Left-click: use on mouseover, target, or yourself" or "Left-click: create" }
 		if ns:IsOutdated("soulstone") then table.insert(hints, "Shift-right-click: delete the old stone") end
 		StoneTooltip(btn, "soulstone", hints)
-		local last = ns.char.lastSoulstone
-		if last and last.name then
-			local mins = math.floor((time() - last.time) / 60)
+		local last, left = ns.char.lastSoulstone, SoulstoneLeft()
+		if last and last.name and left then
 			GameTooltip:AddLine(" ")
-			GameTooltip:AddLine(("Last soulstone: %s (%d min ago)"):format(last.name, mins), 1, 0.82, 0)
+			GameTooltip:AddDoubleLine("Soulstoned", ("%s (%dm left)"):format(last.name, math.ceil(left / 60)),
+				0.7, 0.7, 0.7, 0.85, 0.5, 0.85)
 			GameTooltip:Show()
 		end
 	end)
@@ -402,10 +519,12 @@ function ns:CreateBar()
 		GameTooltip:AddLine("Weapon Stone")
 		local left = ns:WeaponEnchantState()
 		if left then
-			GameTooltip:AddDoubleLine("Main hand", ("%d min left"):format(math.floor(left / 60)), 1, 1, 1, 0.2, 1, 0.2)
+			GameTooltip:AddDoubleLine("Main hand", ("%d min left"):format(math.floor(left / 60)), 0.7, 0.7, 0.7, 1, 1, 1)
 		else
-			GameTooltip:AddDoubleLine("Main hand", "no stone", 1, 1, 1, 1, 0.3, 0.3)
+			GameTooltip:AddDoubleLine("Main hand", "no stone", 0.7, 0.7, 0.7, 1, 0.27, 0.27)
 		end
+		StoneSummary("Firestone", "firestone")
+		StoneSummary("Spellstone", "spellstone")
 		GameTooltip:AddLine(" ")
 		for _, fam in ipairs({ { "firestone", "Left", "Firestone" }, { "spellstone", "Right", "Spellstone" } }) do
 			if ns.known[fam[1]] then
@@ -429,22 +548,30 @@ function ns:CreateBar()
 			GameTooltip:AddLine(" ")
 			AddHint("Left-click: cast the default")
 			AddHint("Right-click: choose another")
+			AddHint("Shift-right-click: keep the menu open")
 			GameTooltip:Show()
 		end)
 	end
 	for _, main in ipairs({ buffs, control, demons }) do
 		main:SetScript("OnEnter", function(btn)
 			TooltipAnchor(btn)
-			GameTooltip:AddLine(btn.title)
+			local a = Style.theme.accent
+			GameTooltip:AddLine(btn.title, a[1], a[2], a[3])
 			if btn == control and ns.creatureAlert then
 				GameTooltip:AddLine(ns.creatureAlert, 0.2, 1, 0.2)
 			end
-			if btn == buffs and btn.glow:IsShown() then
-				GameTooltip:AddLine("You have no armor on.", 1, 0.3, 0.3)
+			if btn == buffs and btn.glowing then
+				GameTooltip:AddLine("You have no armor on.", 1, 0.27, 0.27)
+			end
+			if btn == demons then
+				local pet = UnitExists("pet") and ns.Safe(UnitCreatureFamily("pet"))
+				GameTooltip:AddDoubleLine("Current", pet or "none", 0.7, 0.7, 0.7, 1, 1, 1)
+				AddShardLine(true)
 			end
 			GameTooltip:AddLine(" ")
-			AddHint("Click: open the menu")
-			if btn == demons and ns.hasFelDomination then AddHint("Shift-click a demon: Fel Domination + summon") end
+			AddHint("Left-click: open the menu")
+			AddHint("Right-click: keep it open")
+			if btn == demons and ns.hasFelDomination then AddHint("Shift-click a demon: Fel Domination first") end
 			GameTooltip:Show()
 		end)
 	end
@@ -481,6 +608,7 @@ function ns:CreateBar()
 	rs:SetScript("OnEnter", function(btn)
 		TooltipAnchor(btn)
 		GameTooltip:SetSpellByID(ns.Data.ritualOfSummoning)
+		AddShardLine(true)
 		GameTooltip:AddLine(" ")
 		AddHint("Left-click: Ritual of Summoning on your target")
 		if ns.hasPortal then AddHint("Right-click: Portal of Summoning") end
@@ -489,6 +617,19 @@ function ns:CreateBar()
 	end)
 
 	ns:UpdateSecure()
+end
+
+-- Runs once the theme is known (after ElvUI initializes, when it's loaded).
+function ns:ApplyStyle()
+	ns.loginRound = Style.IsRound() and true or false
+	for _, btn in pairs(buttons) do
+		Style.Button(btn)
+		btn.glowing = nil
+	end
+	buttons.Book.fill = Style.BookFill(buttons.Book)
+	Style.BookText(buttons.Book, buttons.Book.fill)
+	if InCombatLockdown() then ns.secureDirty = true else ns:Layout() end
+	ns:StartModules()
 	ns:UpdateVisuals()
 end
 
@@ -531,20 +672,29 @@ local function IsVisible(key)
 	return main and KnownCount(main) > 0
 end
 
+local function SizeButton(btn, size)
+	btn:SetSize(size, size)
+	Style.Resize(btn, size)
+end
+
+-- Menus open away from the bar: up for a horizontal bar, right for a vertical one,
+-- and outward from the center along the button's angle in the ring.
 local function LayoutMenu(main, size, gap, vertical)
-	local prev
+	local n = 0
 	for _, b in ipairs(main.items) do
-		b:SetSize(size, size)
-		b.glow:SetSize(size * 1.9, size * 1.9)
+		SizeButton(b, size)
 		b:ClearAllPoints()
 		if b.spellID then
-			if vertical then
-				b:SetPoint("LEFT", prev or main, "RIGHT", gap, 0)
+			n = n + 1
+			local step = n * (size + gap)
+			if main.angle then
+				b:SetPoint("CENTER", main, "CENTER", math.cos(main.angle) * step, math.sin(main.angle) * step)
+			elseif vertical then
+				b:SetPoint("CENTER", main, "CENTER", step, 0)
 			else
-				b:SetPoint("BOTTOM", prev or main, "TOP", 0, gap)
+				b:SetPoint("CENTER", main, "CENTER", 0, step)
 			end
 			b:Show()
-			prev = b
 		else
 			b:Hide()
 		end
@@ -552,16 +702,46 @@ local function LayoutMenu(main, size, gap, vertical)
 	main.flyout:SetAllPoints(main)
 end
 
+-- Ring: the book in the center, the other buttons evenly around it from the start
+-- angle. The radius grows with the button count so they never overlap.
+local function LayoutRing(visible, size, gap, showBook)
+	local book = buttons.Book
+	local bookSize = math.floor(size * RING_BOOK_SCALE)
+	SizeButton(book, bookSize)
+	book:ClearAllPoints()
+	book:SetPoint("CENTER", bar, "CENTER")
+	book:SetShown(showBook)
+
+	local count = #visible
+	local radius = bookSize / 2 + size / 2 + gap * 2
+	radius = math.max(radius, count * (size + gap) / (2 * math.pi)) * ns.db.ringRadius
+	local start = math.rad(ns.db.ringAngle)
+	local dir = ns.db.ringClockwise and -1 or 1
+	for i, btn in ipairs(visible) do
+		local angle = start + dir * (i - 1) * 2 * math.pi / math.max(count, 1)
+		btn.angle = angle
+		btn:SetPoint("CENTER", bar, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
+	end
+	local diameter = 2 * (radius + size / 2) + gap * 2
+	bar:SetSize(diameter, diameter)
+end
+
 function ns:Layout()
-	local size, gap, vertical = ns.db.buttonSize, ns.db.spacing, ns.db.vertical
+	local size, gap, vertical, ring = ns.db.buttonSize, ns.db.spacing, ns.db.vertical, ns.db.ring
 	local offset, thickness = gap, size
+	local ringButtons = {}
 	for _, key in ipairs(ORDER) do
 		local btn = buttons[key]
 		local s = key == "Book" and math.floor(size * BOOK_SCALE) or size
-		btn:SetSize(s, s)
-		btn.glow:SetSize(s * 1.9, s * 1.9)
+		SizeButton(btn, s)
 		btn:ClearAllPoints()
-		if IsVisible(key) then
+		btn.angle = nil
+		if not IsVisible(key) then
+			btn:Hide()
+		elseif ring then
+			if key ~= "Book" then table.insert(ringButtons, btn) end
+			btn:Show()
+		else
 			if vertical then
 				btn:SetPoint("TOP", bar, "TOP", 0, -offset)
 			else
@@ -570,18 +750,20 @@ function ns:Layout()
 			btn:Show()
 			offset = offset + s + gap
 			thickness = math.max(thickness, s)
-		else
-			btn:Hide()
 		end
 	end
-	if vertical then
+	if ring then
+		LayoutRing(ringButtons, size, gap, IsVisible("Book"))
+	elseif vertical then
 		bar:SetSize(thickness + gap * 2, offset)
 	else
 		bar:SetSize(offset, thickness + gap * 2)
 	end
 	for _, main in pairs(ns.menus) do
+		main:SetAttribute("autohide", ns.db.menuAutoHide)
 		LayoutMenu(main, size, gap, vertical)
 	end
+	if ns.UpdateBarBackdrop then ns.UpdateBarBackdrop() end
 	bar:SetShown(ns.db.showBar)
 end
 
@@ -659,7 +841,11 @@ local function UpdateStoneButton(btn, family)
 	btn.icon:SetTexture(icon or 134400)
 	local stone = ns.stones[family]
 	btn.Count:SetText(stone and stone.count > 1 and stone.count or "")
-	btn.icon:SetDesaturated(not item and ns.shards == 0)
+	if item then
+		Style.SetUsable(btn, nil)
+	else
+		Style.SetUsable(btn, ns.shards == 0 and "unusable" or nil)
+	end
 	SetItemCooldown(btn, item or KnownItem(family))
 	SetGlow(btn, ns:IsOutdated(family))
 end
@@ -671,24 +857,31 @@ local function UpdateHotkey(btn)
 	if ns.FormatHotkey then ns.FormatHotkey(btn) end
 end
 
+-- Usability and cooldowns only (cheap; runs on SPELL_UPDATE_USABLE and power changes).
+function ns:UpdateUsable()
+	if not bar then return end
+	for _, main in pairs(ns.menus) do
+		for _, b in ipairs(main.items) do
+			if b.spellID then
+				UpdateUsable(b, b.spellID, b.entry.shard)
+				SetSpellCooldown(b, b.spellID)
+			end
+		end
+		if main.mode == "default" then
+			local _, entry = MenuDefault(main)
+			UpdateUsable(main, main.spellID, entry and entry.shard)
+			SetSpellCooldown(main, main.spellID)
+		end
+	end
+	UpdateUsable(buttons.Mount, buttons.Mount.spellID)
+	if ns.hasRitual then UpdateUsable(buttons.Ritual, ns.Data.ritualOfSummoning, true) end
+	SetSpellCooldown(buttons.Ritual, ns.hasPortal and ns.Data.portalOfSummoning or nil)
+end
+
 function ns:UpdateVisuals()
 	if not bar then return end
 
-	local book = buttons.Book
-	book.Count:SetText(ns.shards)
-	if ns.shards == 0 then
-		book.Count:SetTextColor(1, 0.2, 0.2)
-	elseif ns.shards <= ns.db.shardLow then
-		book.Count:SetTextColor(1, 0.82, 0)
-	else
-		book.Count:SetTextColor(1, 1, 1)
-	end
-	local full = ns.db.shardCap > 0 and ns.db.shardCap or 20
-	local ratio = math.min(ns.shards / full, 1)
-	book.fill:SetHeight(math.max(book:GetHeight() * ratio, 0.01))
-	book.fill:SetShown(ratio > 0)
-	SetGlow(book, ns.db.shardCap > 0 and ns.shards > ns.db.shardCap)
-
+	ns:UpdateBook()
 	UpdateStoneButton(buttons.Healthstone, "healthstone")
 	UpdateStoneButton(buttons.Soulstone, "soulstone")
 
@@ -698,14 +891,15 @@ function ns:UpdateVisuals()
 	ws.icon:SetTexture(item and C_Item.GetItemIconByID(item) or SpellIcon(ns.known[fam] and ns.known[fam].spellID) or 134400)
 	ns:UpdateWeaponGlow()
 
-	for key, main in pairs(ns.menus) do
+	for _, main in pairs(ns.menus) do
 		for _, b in ipairs(main.items) do
-			b.icon:SetTexture(SpellIcon(b.spellID or ns.BestSpell(b.entry) or b.entry.ranks and b.entry.ranks[1] or b.entry.spell))
+			local spell = b.spellID or ns.BestSpell(b.entry)
+			b.icon:SetTexture(SpellIcon(spell or (b.entry.ranks and b.entry.ranks[1]) or b.entry.spell))
+			if b.cost then b.cost:SetText(FormatCost(ManaCost(spell))) end
 			UpdateHotkey(b)
 		end
 		if main.mode == "default" then
 			main.icon:SetTexture(SpellIcon(main.spellID) or 136122)
-			SetSpellCooldown(main, main.spellID)
 		end
 		UpdateHotkey(main)
 	end
@@ -729,11 +923,23 @@ function ns:UpdateVisuals()
 	local mount = buttons.Mount
 	mount.icon:SetTexture(SpellIcon(mount.spellID) or 136103)
 
-	local rs = buttons.Ritual
-	rs.icon:SetTexture(SpellIcon(ns.Data.ritualOfSummoning) or 136223)
-	SetSpellCooldown(rs, ns.hasPortal and ns.Data.portalOfSummoning or nil)
+	buttons.Ritual.icon:SetTexture(SpellIcon(ns.Data.ritualOfSummoning) or 136223)
 
 	for _, key in ipairs({ "Healthstone", "Soulstone", "WeaponStone", "Mount", "Ritual" }) do
 		UpdateHotkey(buttons[key])
 	end
+	ns:UpdateUsable()
 end
+
+-- Live updates for usability, mana and the soulstone countdown.
+ns:On("SPELL_UPDATE_USABLE", function() ns:UpdateUsable() end)
+ns:On("SPELL_UPDATE_COOLDOWN", function() ns:UpdateUsable() end)
+ns:On("UNIT_POWER_FREQUENT", function(_, unit)
+	if unit == "player" and ns.db and ns.db.bookMode == "mana" then ns:UpdateBook() end
+end)
+ns:On("UNIT_MAXPOWER", function(_, unit)
+	if unit == "player" and ns.db and ns.db.bookMode == "mana" then ns:UpdateBook() end
+end)
+C_Timer.NewTicker(1, function()
+	if ns.db and ns.db.bookMode == "soulstone" then ns:UpdateBook() end
+end)
