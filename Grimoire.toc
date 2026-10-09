@@ -2,7 +2,7 @@
 ## Title: |cff9482c9Grimoire|r [AllowLoadGameType camelot][ExcludeLoadGameType standard, classic]
 ## Notes: Warlock helper for WoW Forever: stones, shards, curses, banes, demons, summoning, timers and alerts.
 ## Author: Derek Ross
-## Version: 0.1.0
+## Version: @project-version@
 ## IconTexture: Interface\Icons\INV_Misc_Book_05
 ## OptionalDeps: ElvUI
 ## SavedVariables: GrimoireDB
