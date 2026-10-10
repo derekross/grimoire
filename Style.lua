@@ -33,6 +33,7 @@ Style.theme = {
 	noPower = { 0.5, 0.5, 1 },
 	notUsable = { 0.4, 0.4, 0.4 },
 	mana = { 0.31, 0.45, 0.63 },
+	outOfRange = { 0.8, 0.1, 0.1 },
 }
 
 function Style.Look()
@@ -203,15 +204,13 @@ end
 -- The tome in its bezel. Its sockets light up one by one (shards, or soulstone time).
 local function StyleArtBook(book)
 	book.round, book.art = true, true
-	book.icon:SetTexture(MEDIA .. "Grimoire")
 	book.icon:SetTexCoord(0, 1, 0, 1)
 	book.icon:ClearAllPoints()
 	book.icon:SetAllPoints()
 	book.pips = {}
 	for i = 1, PIPS do
 		local pip = book:CreateTexture(nil, "ARTWORK", nil, 5)
-		pip:SetTexture(MEDIA .. "Pip")
-		pip:Hide()
+				pip:Hide()
 		local flash = pip:CreateAnimationGroup()
 		local fade = flash:CreateAnimation("Alpha")
 		fade:SetFromAlpha(0)
@@ -222,6 +221,15 @@ local function StyleArtBook(book)
 		book.pips[i] = pip
 	end
 	ArtGlows(book)
+	Style.UpdateTome(book)
+end
+
+-- Tome color variant (Media/Grimoire<Color>.tga and its matching socket light).
+function Style.UpdateTome(book)
+	if not book.pips then return end
+	local color = ns.db.tomeColor
+	book.icon:SetTexture(MEDIA .. "Grimoire" .. color)
+	for _, pip in ipairs(book.pips) do pip:SetTexture(MEDIA .. "Pip" .. color) end
 end
 
 -- Lights the first n sockets; newly lit ones fade in.
@@ -270,6 +278,16 @@ local function SquareGlow(btn)
 	btn.squareGlow = glow
 end
 
+-- Masque group for square buttons, when Masque is installed and allowed.
+local masqueGroup
+function Style.Masque()
+	if masqueGroup == nil then
+		local Masque = LibStub and LibStub("Masque", true)
+		masqueGroup = Masque and ns.db.masque and Masque:Group("Grimoire") or false
+	end
+	return masqueGroup or nil
+end
+
 -- Public -----------------------------------------------------------------------
 
 -- Styles one button. Called for every Grimoire button once the theme is known.
@@ -286,6 +304,9 @@ function Style.Button(btn)
 		StyleRound(btn)
 	elseif Style.SquareElvUI then
 		Style.SquareElvUI(btn)
+	elseif Style.Masque() then
+		Style.Masque():AddButton(btn, { Icon = btn.icon, Cooldown = btn.cooldown, HotKey = btn.HotKey, Count = btn.Count })
+		SquareGlow(btn)
 	else
 		StyleSquarePlain(btn)
 		SquareGlow(btn)
@@ -342,19 +363,43 @@ function Style.SetGlow(btn, on)
 	end
 end
 
--- Usability tint: full color, out of mana (blue), or unusable (grey + desaturated).
-function Style.SetUsable(btn, state)
+-- Icon tint. Usability (blue: out of mana, grey: unusable) and range (red) combine;
+-- range can be secret in combat, in which case the widget picks the color itself.
+local issecretvalue = issecretvalue or function() return false end
+
+local function BaseColor(btn)
 	local t = Style.theme
-	if state == "nopower" then
-		btn.icon:SetDesaturated(false)
-		btn.icon:SetVertexColor(t.noPower[1], t.noPower[2], t.noPower[3])
-	elseif state == "unusable" then
-		btn.icon:SetDesaturated(true)
-		btn.icon:SetVertexColor(t.notUsable[1] + 0.3, t.notUsable[2] + 0.3, t.notUsable[3] + 0.3)
-	else
-		btn.icon:SetDesaturated(false)
-		btn.icon:SetVertexColor(1, 1, 1)
+	if btn.usableState == "nopower" then return t.noPower[1], t.noPower[2], t.noPower[3] end
+	if btn.usableState == "unusable" then return t.notUsable[1] + 0.3, t.notUsable[2] + 0.3, t.notUsable[3] + 0.3 end
+	return 1, 1, 1
+end
+
+function Style.Tint(btn)
+	btn.icon:SetDesaturated(btn.usableState == "unusable")
+	local r, g, b = BaseColor(btn)
+	local inRange = btn.inRange
+	if ns.db.rangeTint and (issecretvalue(inRange) or inRange ~= nil) then
+		local o = Style.theme.outOfRange
+		if issecretvalue(inRange) then
+			btn.icon:SetVertexColorFromBoolean(inRange, CreateColor(r, g, b), CreateColor(o[1], o[2], o[3]))
+			return
+		elseif inRange == false then
+			btn.icon:SetVertexColor(o[1], o[2], o[3])
+			return
+		end
 	end
+	btn.icon:SetVertexColor(r, g, b)
+end
+
+function Style.SetUsable(btn, state)
+	btn.usableState = state
+	Style.Tint(btn)
+end
+
+-- inRange: true, false, nil (no range check), or a secret boolean.
+function Style.SetRange(btn, inRange)
+	btn.inRange = inRange
+	Style.Tint(btn)
 end
 
 -- The book's fill: a status bar so it can show secret values (mana in combat),

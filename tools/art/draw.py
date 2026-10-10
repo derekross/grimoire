@@ -57,6 +57,15 @@ def rivets(c, cx, cy, r, n, size, start=0):
 
 FEL = (0.45, 1.0, 0.35)
 
+# Tome color variants: leather (light, mid, dark), sigil glow, engraving in the well.
+PALETTES = {
+    "Void":   dict(leather=((0.36, 0.18, 0.42), (0.20, 0.08, 0.25), (0.08, 0.03, 0.10)), sigil=FEL, engrave=(0.55, 0.35, 0.75)),
+    "Shadow": dict(leather=((0.22, 0.20, 0.25), (0.10, 0.09, 0.12), (0.03, 0.02, 0.04)), sigil=(0.72, 0.45, 1.0), engrave=(0.45, 0.35, 0.60)),
+    "Fel":    dict(leather=((0.20, 0.36, 0.16), (0.08, 0.18, 0.07), (0.02, 0.06, 0.02)), sigil=(0.75, 1.0, 0.25), engrave=(0.35, 0.65, 0.30)),
+    "Blood":  dict(leather=((0.46, 0.12, 0.12), (0.24, 0.04, 0.05), (0.09, 0.01, 0.02)), sigil=(1.0, 0.55, 0.15), engrave=(0.70, 0.30, 0.25)),
+}
+PAL = PALETTES["Void"]
+
 def glow(c, cx, cy, r, col, a=0.8):
     c.arc(cx, cy, r, 0, TAU)
     c.set_source(radial(c, cx, cy, 0, r, [(0, (*col, a)), (0.4, (*col, a * 0.35)), (1, (*col, 0))]))
@@ -96,12 +105,13 @@ def tome(c, cx, cy, w, h):
         c.arc(x0 + rr, y0 + h - rr, rr, math.pi / 2, math.pi); c.arc(x0 + rr, y0 + rr, rr, math.pi, 3 * math.pi / 2)
         c.close_path()
     cover_path()
-    c.set_source(radial(c, cx - w * 0.15, cy - h * 0.2, 4, w * 0.9, [(0, (0.36, 0.18, 0.42, 1)), (0.6, (0.20, 0.08, 0.25, 1)), (1, (0.08, 0.03, 0.10, 1))]))
+    light, mid, dark = PAL["leather"]
+    c.set_source(radial(c, cx - w * 0.15, cy - h * 0.2, 4, w * 0.9, [(0, (*light, 1)), (0.6, (*mid, 1)), (1, (*dark, 1))]))
     c.fill_preserve()
     c.set_source_rgba(0, 0, 0, 0.9); c.set_line_width(2); c.stroke()
     # spine band
     c.rectangle(x0, y0, 12, h)
-    c.set_source(linear(x0, 0, x0 + 12, 0, [(0, (0.05, 0.02, 0.06, 1)), (0.5, (0.22, 0.10, 0.26, 1)), (1, (0.06, 0.02, 0.08, 1))])); c.fill()
+    c.set_source(linear(x0, 0, x0 + 12, 0, [(0, (*dark, 1)), (0.5, (*mid, 1)), (1, (*dark, 1))])); c.fill()
     for yy in (y0 + h * 0.18, y0 + h * 0.5, y0 + h * 0.82):
         c.rectangle(x0, yy - 2, 12, 4); c.set_source(linear(0, yy - 2, 0, yy + 2, [(0, (0.85, 0.7, 0.4, 1)), (1, (0.35, 0.25, 0.1, 1))])); c.fill()
     # tooled border
@@ -118,11 +128,12 @@ def tome(c, cx, cy, w, h):
     c.set_source_rgba(0, 0, 0, 0.8); c.set_line_width(1); c.stroke()
     # glowing sigil on the cover
     scx = cx + 6
-    glow(c, scx, cy, w * 0.42, FEL, 0.55)
-    sigil(c, scx, cy, w * 0.27, FEL, 1.8)
+    glow(c, scx, cy, w * 0.42, PAL["sigil"], 0.55)
+    sigil(c, scx, cy, w * 0.27, PAL["sigil"], 1.8)
     # eye-gem in the middle
     c.arc(scx, cy, 5, 0, TAU)
-    c.set_source(radial(c, scx - 1.5, cy - 1.5, 0, 6, [(0, (0.9, 1, 0.8, 1)), (0.5, (0.3, 0.9, 0.2, 1)), (1, (0.05, 0.3, 0.05, 1))])); c.fill()
+    sr, sg, sb = PAL["sigil"]
+    c.set_source(radial(c, scx - 1.5, cy - 1.5, 0, 6, [(0, (0.95, 1, 0.9, 1)), (0.5, (sr, sg, sb, 1)), (1, (sr * 0.2, sg * 0.2, sb * 0.2, 1))])); c.fill()
 
 def centerpiece(size, name, pips=20):
     # name is a full path from here on
@@ -130,9 +141,10 @@ def centerpiece(size, name, pips=20):
     cx = cy = 128
     # dark well behind
     c.arc(cx, cy, 104, 0, TAU)
-    c.set_source(radial(c, cx, cy, 10, 104, [(0, (0.16, 0.08, 0.20, 1)), (0.75, (0.06, 0.02, 0.08, 1)), (1, (0.02, 0.0, 0.03, 1))])); c.fill()
+    mid, dark = PAL["leather"][1], PAL["leather"][2]
+    c.set_source(radial(c, cx, cy, 10, 104, [(0, (mid[0] * 0.7, mid[1] * 0.7, mid[2] * 0.7, 1)), (0.75, (*dark, 1)), (1, (dark[0] * 0.3, dark[1] * 0.3, dark[2] * 0.3, 1))])); c.fill()
     # faint sigil engraved in the well
-    sigil(c, cx, cy, 96, (0.55, 0.35, 0.75), 0.9)
+    sigil(c, cx, cy, 96, PAL["engrave"], 0.9)
     # pip sockets in the rim (runtime lights them; drawn here unlit)
     metal_ring(c, cx, cy, 126, 103, tint=(1.0, 0.95, 1.1))
     c.set_line_width(4); c.set_line_cap(cairo.LINE_CAP_ROUND)
@@ -181,18 +193,29 @@ def addon_icon(size, name):
 
 def pip(size, name):
     s, c = surface(size)
-    glow(c, 128, 128, 128, FEL, 0.9)
+    sr, sg, sb = PAL["sigil"]
+    glow(c, 128, 128, 128, PAL["sigil"], 0.9)
     c.arc(128, 128, 60, 0, TAU)
-    c.set_source(radial(c, 108, 108, 0, 70, [(0, (0.95, 1, 0.85, 1)), (0.45, (0.45, 1, 0.3, 1)), (1, (0.1, 0.5, 0.05, 1))])); c.fill()
+    c.set_source(radial(c, 108, 108, 0, 70, [(0, (0.97, 1, 0.92, 1)), (0.45, (sr, sg, sb, 1)), (1, (sr * 0.25, sg * 0.4, sb * 0.25, 1))])); c.fill()
     s.write_to_png(name)
 
+def use(palette):
+    def wrap(fn):
+        def run(n):
+            global PAL
+            PAL = PALETTES[palette]
+            fn(n)
+        return run
+    return wrap
+
 TEXTURES = {
-    "Grimoire": lambda n: centerpiece(256, n),
     "Rim": lambda n: button_rim(128, n),
     "RimGlow": lambda n: glow_ring(128, n),
-    "Pip": lambda n: pip(32, n),
-    "Icon": lambda n: addon_icon(64, n),
+    "Icon": use("Void")(lambda n: addon_icon(64, n)),
 }
+for palette in PALETTES:
+    TEXTURES["Grimoire" + palette] = use(palette)(lambda n: centerpiece(256, n))
+    TEXTURES["Pip" + palette] = use(palette)(lambda n: pip(32, n))
 for name, draw in TEXTURES.items():
     png = os.path.join(OUT, name + ".png")
     draw(png)

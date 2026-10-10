@@ -12,6 +12,7 @@ for binding, label in pairs({
 	["GrimoireBanesButton:LeftButton"] = "Cast default bane",
 	["GrimoireBanesButton:RightButton"] = "Bane menu",
 	["GrimoireBuffsButton:LeftButton"] = "Buff menu",
+	["GrimoireLifeTapButton:LeftButton"] = "Life Tap",
 	["GrimoireControlButton:LeftButton"] = "Crowd control menu",
 	["GrimoireDemonsButton:LeftButton"] = "Demon menu",
 	["GrimoireMountButton:LeftButton"] = "Mount",
@@ -29,6 +30,7 @@ ns.optionList = {
 	{ key = "showBar", name = "Show bar", type = "toggle" },
 	{ key = "locked", name = "Lock bar", type = "toggle", desc = "Stops shift-drag on the book from moving the bar." },
 	{ key = "ring", name = "Ring layout", type = "toggle", desc = "Book in the center with the buttons in a circle around it, like Necrosis." },
+	{ key = "tomeColor", name = "Tome color", type = "select", values = { Void = "Void (purple, fel sigil)", Shadow = "Shadow (black, violet sigil)", Fel = "Fel (green)", Blood = "Blood (red, fire sigil)" }, order = { "Void", "Shadow", "Fel", "Blood" }, desc = "Grimoire ring style only." },
 	{ key = "ringStyle", name = "Ring style", type = "select", values = { grimoire = "Grimoire (iron and tome)", round = "Flat round", square = "Square" }, order = { "grimoire", "round", "square" }, desc = "Changing this reloads the UI." },
 	{ key = "ringAngle", name = "Ring start angle", type = "range", min = 0, max = 345, step = 15, desc = "Where the first button sits. 90 is the top." },
 	{ key = "ringRadius", name = "Ring size", type = "range", min = 0.8, max = 1.6, step = 0.05 },
@@ -40,6 +42,13 @@ ns.optionList = {
 	{ key = "menuAutoHide", name = "Menus close after (seconds)", type = "range", min = 1, max = 6, step = 0.5, desc = "How long an open menu stays after the mouse leaves it. Right-click keeps a menu open." },
 	{ key = "bookMode", name = "Book shows", type = "select", values = { shards = "Soul Shards", soulstone = "Soulstone timer", mana = "Mana" }, order = { "shards", "soulstone", "mana" }, desc = "You can also scroll the mouse wheel over the book." },
 
+	{ type = "header", name = "Visibility" },
+	{ key = "visibility", name = "Show the bar", type = "select", values = { always = "Always", combat = "Only in combat" }, order = { "always", "combat" } },
+	{ key = "hideResting", name = "Hide in cities and inns", type = "toggle", desc = "Still shows if you enter combat there." },
+	{ key = "fadeOut", name = "Fade when not hovered", type = "toggle" },
+	{ key = "fadeAlpha", name = "Faded opacity", type = "range", min = 0, max = 1, step = 0.05 },
+	{ key = "rangeTint", name = "Red when the target is out of range", type = "toggle" },
+
 	{ type = "header", name = "Shards and stones" },
 	{ key = "shardLow", name = "Low shard warning", type = "range", min = 0, max = 10, step = 1, desc = "Shard count turns yellow at or below this." },
 	{ key = "shardCap", name = "Shard cap (0 = off)", type = "range", min = 0, max = 32, step = 1, desc = "Offer to delete shards above this count. Never deletes without asking." },
@@ -47,6 +56,9 @@ ns.optionList = {
 	{ key = "weaponWarnMinutes", name = "Weapon stone warning (min)", type = "range", min = 0, max = 30, step = 1, desc = "Glow when the main-hand stone has less than this left." },
 	{ key = "tradeOnRightClick", name = "Right-click healthstone trades it", type = "toggle" },
 	{ key = "armorReminder", name = "Glow Buffs when you have no armor", type = "toggle" },
+	{ key = "lifeTapReminder", name = "Life Tap reminder", type = "toggle", desc = "Out of combat, glow Life Tap when mana is low and health is high." },
+	{ key = "lifeTapMana", name = "Life Tap: mana below (%)", type = "range", min = 10, max = 90, step = 5 },
+	{ key = "lifeTapHealth", name = "Life Tap: health above (%)", type = "range", min = 30, max = 100, step = 5 },
 
 	{ type = "header", name = "Timers and alerts" },
 	{ key = "timers", name = "Crowd control timers", type = "toggle", desc = "Estimated from your own casts; can't see early breaks." },
@@ -61,6 +73,17 @@ ns.optionList = {
 	{ key = "summonQueue", name = "Summon queue", type = "toggle", desc = "Collect summon requests from group chat and whispers." },
 	{ key = "summonKeywords", name = "Summon keywords (comma separated)", type = "input" },
 	{ key = "summonSync", name = "Share summons with other Grimoire warlocks", type = "toggle" },
+
+	{ type = "header", name = "Group coordination" },
+	{ key = "acceptCurseAssignments", name = "Accept curse assignments", type = "toggle", desc = "Let the group leader or an assistant set your default curse from the Warlocks panel." },
+	{ key = "shareSoulstones", name = "Share soulstones with other warlocks", type = "toggle" },
+	{ key = "hsRequests", name = "Healthstone requests", type = "toggle", desc = "Add players who ask for a healthstone to the Requests list." },
+	{ key = "hsKeywords", name = "Healthstone keywords (comma separated)", type = "input" },
+	{ key = "hsAutoReply", name = "Whisper back when someone asks for a healthstone", type = "toggle" },
+
+	{ type = "header", name = "Other addons" },
+	{ key = "broker", name = "Data broker feed (Titan Panel, Bazooka...)", type = "toggle", desc = "Takes effect after a reload." },
+	{ key = "masque", name = "Masque skins for square buttons", type = "toggle", desc = "Takes effect after a reload. Not used with ElvUI." },
 
 	{ type = "header", name = "Chat messages (group only)" },
 	{ key = "speechSoulstone", path = { "speech", "soulstone" }, name = "Announce soulstones", type = "toggle" },
@@ -96,7 +119,7 @@ function ns:SetOptionValue(opt, value)
 	for i = 1, #path - 1 do t = t[path[i]] end
 	if opt.invert then value = not value end
 	t[path[#path]] = value
-	if opt.key == "summonKeywords" and ns.ParseSummonKeywords then ns.ParseSummonKeywords() end
+	if (opt.key == "summonKeywords" or opt.key == "hsKeywords") and ns.ParseSummonKeywords then ns.ParseSummonKeywords() end
 	ns:ApplySettings()
 	if opt.key == "ring" or opt.key == "ringStyle" then ns.Style.CheckShapeChange() end
 end
@@ -111,7 +134,9 @@ function ns:ApplySettings()
 		ns.bar:SetScale(ns.db.scale)
 		ns:UpdateSecure()
 	end
+	if ns.buttons.Book then ns.Style.UpdateTome(ns.buttons.Book) end
 	ns:UpdateVisuals()
+	ns:UpdateRange()
 	ns:CheckShardCap()
 end
 
@@ -170,6 +195,11 @@ SlashCmdList.GRIMOIRE = function(msg)
 		OpenOptions()
 	elseif cmd == "show" or cmd == "hide" then
 		ns:SetOption("showBar", cmd == "show")
+	elseif cmd == "raid" or cmd == "warlocks" then
+		if ns.ToggleRaidPanel then ns:ToggleRaidPanel() end
+	elseif cmd == "tome" and arg ~= "" then
+		local color = arg:sub(1, 1):upper() .. arg:sub(2)
+		if ({ Void = true, Shadow = true, Fel = true, Blood = true })[color] then ns:SetOption("tomeColor", color) end
 	elseif cmd == "book" and ns.bookModeNames[arg] then
 		ns:SetOption("bookMode", arg)
 	elseif cmd == "ring" or cmd == "bar" then
@@ -194,6 +224,6 @@ SlashCmdList.GRIMOIRE = function(msg)
 		ns.bar:SetPoint(ns.db.point[1], UIParent, ns.db.point[3], ns.db.point[4], ns.db.point[5])
 		ns.Print("Bar position reset.")
 	else
-		ns.Print("/grim [config | ring | bar | book shards|soulstone|mana | show | hide | lock | unlock | cap <n> | msg <text> | keywords <a, b> | queue | reset]")
+		ns.Print("/grim [config | ring | bar | raid | tome void|shadow|fel|blood | book shards|soulstone|mana | show | hide | lock | unlock | cap <n> | msg <text> | keywords <a, b> | queue | reset]")
 	end
 end

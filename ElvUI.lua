@@ -58,37 +58,14 @@ local function DTOnEvent(panel)
 	panel.text:SetFormattedText("Shards: %s%d|r", ShardColor(), ns.shards)
 end
 
-local function StoneLine(tooltip, label, family)
-	local stone = ns.stones[family]
-	if stone then
-		local name = C_Item.GetItemNameByID(stone.itemID) or label
-		local outdated = ns:IsOutdated(family) and " |cff33ff33(upgrade)|r" or ""
-		tooltip:AddDoubleLine(label, name .. outdated, 1, 1, 1, 0.6, 1, 0.6)
-	elseif ns.known[family] then
-		tooltip:AddDoubleLine(label, "none", 1, 1, 1, 1, 0.3, 0.3)
-	end
-end
-
-local function DTOnEnter(panel)
+local function DTOnEnter()
 	DT.tooltip:ClearLines()
-	DT.tooltip:AddLine("Grimoire")
 	if ns.db then
-		DT.tooltip:AddDoubleLine("Soul Shards", ns.shards, 1, 1, 1, 1, 1, 1)
-		DT.tooltip:AddDoubleLine("Gained this session", ns.sessionShards or 0, 1, 1, 1, 0.6, 1, 0.6)
-		StoneLine(DT.tooltip, "Healthstone", "healthstone")
-		StoneLine(DT.tooltip, "Soulstone", "soulstone")
-		StoneLine(DT.tooltip, "Firestone", "firestone")
-		StoneLine(DT.tooltip, "Spellstone", "spellstone")
-		local left = ns:WeaponEnchantState()
-		DT.tooltip:AddDoubleLine("Weapon stone", left and ("%d min"):format(math.floor(left / 60)) or "none",
-			1, 1, 1, left and 0.6 or 1, left and 1 or 0.3, left and 0.6 or 0.3)
-		local last = ns.char.lastSoulstone
-		if last and last.name then
-			DT.tooltip:AddDoubleLine("Last soulstone", ("%s (%d min ago)"):format(last.name, math.floor((time() - last.time) / 60)),
-				1, 1, 1, 1, 0.82, 0)
-		end
+		ns:AddStatusLines(DT.tooltip)
 		DT.tooltip:AddLine(" ")
-		DT.tooltip:AddLine("Click: show/hide the Grimoire bar", 0.6, 0.8, 1)
+		DT.tooltip:AddLine("Click: show/hide the Grimoire bar", 0.5, 0.5, 0.5)
+	else
+		DT.tooltip:AddLine("Grimoire")
 	end
 	DT.tooltip:Show()
 end
@@ -142,6 +119,7 @@ local function ApplyTheme()
 	t.outline = E.db.general.fontStyle ~= "NONE" and E.db.general.fontStyle or ""
 	t.noPower = Color(AB.db and AB.db.noPowerColor, t.noPower)
 	t.notUsable = Color(AB.db and AB.db.notUsableColor, t.notUsable)
+	t.outOfRange = Color(AB.db and AB.db.noRangeColor, t.outOfRange)
 	local power = E.db.unitframe and E.db.unitframe.colors and E.db.unitframe.colors.power
 	t.mana = Color(power and power.MANA, t.mana)
 
@@ -164,6 +142,16 @@ local function StyleBar()
 	end
 	ns.FormatHotkey = function(btn) AB:FixKeybindText(btn) end
 	ns:ApplyStyle()
+
+	-- ElvUI's hover binding (/kb): hovering a Grimoire button binds a key to it,
+	-- including individual spells inside the menus.
+	local function HoverBind(btn) AB:BindUpdate(btn) end
+	for _, btn in pairs(ns.buttons) do
+		if btn.binding then
+			btn.keyBoundTarget = btn.binding
+			btn:HookScript("OnEnter", HoverBind)
+		end
+	end
 	E:CreateMover(ns.bar, "GrimoireMover", "Grimoire", nil, nil, nil, "ALL,ACTIONBARS", nil, "Grimoire")
 	-- Shift-drag moves the bar itself; on release, ElvUI's (hidden) mover is placed where
 	-- the bar ended up and saved, then the bar is re-anchored to it the way ElvUI does.

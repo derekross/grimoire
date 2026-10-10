@@ -3,6 +3,7 @@ local addonName, ns = ...
 local C_Item, C_Spell = C_Item, C_Spell
 local InCombatLockdown, GameTooltip = InCombatLockdown, GameTooltip
 local Style = ns.Style
+local issecretvalue = issecretvalue or function() return false end
 
 local NOOP = "grimoire_noop" -- secure action type with no handler: the click does nothing secure
 local MENU_TEMPLATE = "SecureActionButtonTemplate, SecureHandlerBaseTemplate"
@@ -57,12 +58,12 @@ ns.buttons = buttons
 ns.menus = {}
 
 -- Bar order. Keys double as button name parts and option keys.
-local ORDER = { "Book", "Healthstone", "Soulstone", "WeaponStone", "Curses", "Banes", "Buffs", "Control", "Demons", "Mount", "Ritual" }
+local ORDER = { "Book", "Healthstone", "Soulstone", "WeaponStone", "Curses", "Banes", "Buffs", "LifeTap", "Control", "Demons", "Mount", "Ritual" }
 ns.buttonOrder = ORDER
 
 ns.buttonTitles = {
 	Book = "Grimoire (Soul Shards)", Healthstone = "Healthstone", Soulstone = "Soulstone",
-	WeaponStone = "Weapon Stone", Curses = "Curses", Banes = "Banes", Buffs = "Buffs",
+	WeaponStone = "Weapon Stone", Curses = "Curses", Banes = "Banes", Buffs = "Buffs", LifeTap = "Life Tap",
 	Control = "Crowd Control", Demons = "Demons", Mount = "Mount", Ritual = "Summoning",
 }
 
@@ -128,9 +129,10 @@ end
 
 -- Mana cost of a spell, or nil.
 local function ManaCost(spellID)
-	local costs = spellID and C_Spell.GetSpellPowerCost(spellID)
+	local costs = spellID and ns.Safe(C_Spell.GetSpellPowerCost(spellID))
 	for _, cost in ipairs(costs or {}) do
-		if ns.Safe(cost.type) == Enum.PowerType.Mana then return ns.Safe(cost.cost) end
+		cost = ns.Safe(cost)
+		if cost and ns.Safe(cost.type) == Enum.PowerType.Mana then return ns.Safe(cost.cost) end
 	end
 end
 
@@ -262,6 +264,7 @@ local function CreateMenu(key, entries, mode, opts)
 				ns.db.defaults[key] = btn.index
 				ns:RequestSecureUpdate()
 				ns:UpdateVisuals()
+				if key == "Curses" and ns.OnCurseChanged then ns:OnCurseChanged() end
 			end)
 		end
 		SecureHandlerWrapScript(b, "OnClick", main, MENU_PRE, MENU_CLOSE)
@@ -368,52 +371,61 @@ function ns:CycleBookMode(delta)
 	ns:UpdateBook()
 end
 
-local function StoneSummary(label, family)
+local function StoneSummary(tt, label, family)
 	local stone, known = ns.stones[family], ns.known[family]
 	if not known and not stone then return end
 	if stone then
 		local name = C_Item.GetItemNameByID(stone.itemID) or label
 		local extra = ns:IsOutdated(family) and " |cff33ff33(upgrade)|r" or ""
-		GameTooltip:AddDoubleLine(label, name .. (stone.count > 1 and (" x" .. stone.count) or "") .. extra,
+		tt:AddDoubleLine(label, name .. (stone.count > 1 and (" x" .. stone.count) or "") .. extra,
 			0.7, 0.7, 0.7, 1, 1, 1)
 	else
-		GameTooltip:AddDoubleLine(label, "none", 0.7, 0.7, 0.7, 1, 0.27, 0.27)
+		tt:AddDoubleLine(label, "none", 0.7, 0.7, 0.7, 1, 0.27, 0.27)
 	end
 end
 
-local function BookTooltip(btn)
-	TooltipAnchor(btn)
+-- The warlock's status at a glance; shared by the book, the data broker feed and the
+-- ElvUI datatext.
+function ns:AddStatusLines(tt)
 	local a = Style.theme.accent
-	GameTooltip:AddLine("Grimoire", a[1], a[2], a[3])
-	AddShardLine(true)
-	GameTooltip:AddDoubleLine("Gained this session", ns.sessionShards or 0, 0.7, 0.7, 0.7, 0.6, 1, 0.6)
-	if ns.db.shardCap > 0 then GameTooltip:AddDoubleLine("Cap", ns.db.shardCap, 0.7, 0.7, 0.7, 1, 1, 1) end
-	GameTooltip:AddLine(" ")
-	StoneSummary("Healthstone", "healthstone")
-	StoneSummary("Soulstone", "soulstone")
-	StoneSummary("Firestone", "firestone")
-	StoneSummary("Spellstone", "spellstone")
+	tt:AddLine("Grimoire", a[1], a[2], a[3])
+	local r, g, b = 1, 1, 1
+	if ns.shards == 0 then r, g, b = 1, 0.27, 0.27 end
+	tt:AddDoubleLine("Soul Shards", ns.shards, 0.7, 0.7, 0.7, r, g, b)
+	tt:AddDoubleLine("Gained this session", ns.sessionShards or 0, 0.7, 0.7, 0.7, 0.6, 1, 0.6)
+	if ns.db.shardCap > 0 then tt:AddDoubleLine("Cap", ns.db.shardCap, 0.7, 0.7, 0.7, 1, 1, 1) end
+	tt:AddLine(" ")
+	StoneSummary(tt, "Healthstone", "healthstone")
+	StoneSummary(tt, "Soulstone", "soulstone")
+	StoneSummary(tt, "Firestone", "firestone")
+	StoneSummary(tt, "Spellstone", "spellstone")
 	local left = ns:WeaponEnchantState()
 	if ns.known.firestone or ns.known.spellstone then
 		if left then
-			GameTooltip:AddDoubleLine("Weapon", ("%d min"):format(math.floor(left / 60)), 0.7, 0.7, 0.7, 1, 1, 1)
+			tt:AddDoubleLine("Weapon", ("%d min"):format(math.floor(left / 60)), 0.7, 0.7, 0.7, 1, 1, 1)
 		else
-			GameTooltip:AddDoubleLine("Weapon", "no stone", 0.7, 0.7, 0.7, 1, 0.27, 0.27)
+			tt:AddDoubleLine("Weapon", "no stone", 0.7, 0.7, 0.7, 1, 0.27, 0.27)
 		end
 	end
 	local last, ssLeft = ns.char.lastSoulstone, SoulstoneLeft()
 	if last and last.name and ssLeft then
-		GameTooltip:AddDoubleLine("Soulstoned", ("%s (%dm left)"):format(last.name, math.ceil(ssLeft / 60)),
+		tt:AddDoubleLine("Soulstoned", ("%s (%dm left)"):format(last.name, math.ceil(ssLeft / 60)),
 			0.7, 0.7, 0.7, 0.85, 0.5, 0.85)
 	end
 	local pet = UnitExists("pet") and ns.Safe(UnitCreatureFamily("pet"))
-	if pet then GameTooltip:AddDoubleLine("Demon", pet, 0.7, 0.7, 0.7, 1, 1, 1) end
+	if pet then tt:AddDoubleLine("Demon", pet, 0.7, 0.7, 0.7, 1, 1, 1) end
+end
+
+local function BookTooltip(btn)
+	TooltipAnchor(btn)
+	ns:AddStatusLines(GameTooltip)
 	GameTooltip:AddLine(" ")
 	if ns.db.shardCap > 0 and ns.shards > ns.db.shardCap then
 		AddHint("Left-click: delete extra shards")
-	elseif ns.db.summonQueue then
-		AddHint("Left-click: summon queue")
+	else
+		AddHint("Left-click: requests (summons, healthstones)")
 	end
+	AddHint("Shift-left-click: warlocks in your group")
 	AddHint("Mouse wheel: shards / soulstone / mana")
 	AddHint("Right-click: options")
 	if not ns.db.locked then AddHint("Shift-drag: move") end
@@ -444,9 +456,15 @@ function ns:CreateBar()
 	book:RegisterForDrag("LeftButton")
 	book:EnableMouseWheel(true)
 	book:SetScript("OnMouseWheel", function(_, delta) ns:CycleBookMode(delta > 0 and 1 or -1) end)
-	book:SetScript("OnClick", function(_, mouse)
+	book:SetScript("OnClick", function(btn, mouse)
+		if btn.dragged then -- the release of a shift-drag, not a click
+			btn.dragged = nil
+			return
+		end
 		if mouse == "RightButton" then
 			SlashCmdList.GRIMOIRE("")
+		elseif IsShiftKeyDown() then
+			if ns.ToggleRaidPanel then ns:ToggleRaidPanel() end
 		elseif ns.db.shardCap > 0 and ns.shards > ns.db.shardCap then
 			ns.lastCapPrompt = nil
 			ns:CheckShardCap()
@@ -457,7 +475,7 @@ function ns:CreateBar()
 	-- Shift-drag moves the bar (under ElvUI, its mover, so the spot is saved in the profile).
 	book:SetScript("OnDragStart", function(btn)
 		if not IsShiftKeyDown() or ns.db.locked or InCombatLockdown() then return end
-		btn.dragging = true
+		btn.dragging, btn.dragged = true, true
 		if ns.StartDrag then ns.StartDrag() else bar:StartMoving() end
 	end)
 	book:SetScript("OnDragStop", function(btn)
@@ -533,8 +551,8 @@ function ns:CreateBar()
 		else
 			GameTooltip:AddDoubleLine("Main hand", "no stone", 0.7, 0.7, 0.7, 1, 0.27, 0.27)
 		end
-		StoneSummary("Firestone", "firestone")
-		StoneSummary("Spellstone", "spellstone")
+		StoneSummary(GameTooltip, "Firestone", "firestone")
+		StoneSummary(GameTooltip, "Spellstone", "spellstone")
 		GameTooltip:AddLine(" ")
 		for _, fam in ipairs({ { "firestone", "Left", "Firestone" }, { "spellstone", "Right", "Spellstone" } }) do
 			if ns.known[fam[1]] then
@@ -596,6 +614,25 @@ function ns:CreateBar()
 			end
 		end
 	end
+
+	-- Life Tap, with the trade spelled out and an out-of-combat reminder glow.
+	local tap = CreateButton("LifeTap", "SecureActionButtonTemplate")
+	tap.title = "Life Tap"
+	tap:SetAttribute("type", "spell")
+	tap:SetScript("OnEnter", function(btn)
+		TooltipAnchor(btn)
+		if btn.spellID then GameTooltip:SetSpellByID(btn.spellID) else GameTooltip:AddLine("Life Tap") end
+		local gain = ns:LifeTapAmount()
+		if gain then
+			GameTooltip:AddLine(" ")
+			GameTooltip:AddDoubleLine("Mana per tap", gain, 0.7, 0.7, 0.7, 0.6, 0.8, 1)
+			local mana, maxMana = ns.Safe(UnitPower("player", Enum.PowerType.Mana)), ns.Safe(UnitPowerMax("player", Enum.PowerType.Mana))
+			if mana and maxMana and maxMana > mana then
+				GameTooltip:AddDoubleLine("Taps to full mana", math.ceil((maxMana - mana) / gain), 0.7, 0.7, 0.7, 1, 1, 1)
+			end
+		end
+		GameTooltip:Show()
+	end)
 
 	-- Mount
 	local mount = CreateButton("Mount", "SecureActionButtonTemplate")
@@ -677,6 +714,7 @@ local function IsVisible(key)
 	if key == "Soulstone" then return ns.known.soulstone ~= nil end
 	if key == "WeaponStone" then return ns.known.firestone ~= nil or ns.known.spellstone ~= nil end
 	if key == "Mount" then return buttons.Mount.spellID ~= nil end
+	if key == "LifeTap" then return buttons.LifeTap.spellID ~= nil end
 	if key == "Ritual" then return ns.hasRitual end
 	local main = ns.menus[key]
 	return main and KnownCount(main) > 0
@@ -774,7 +812,7 @@ function ns:Layout()
 		LayoutMenu(main, size, gap, vertical)
 	end
 	if ns.UpdateBarBackdrop then ns.UpdateBarBackdrop() end
-	bar:SetShown(ns.db.showBar)
+	if ns.UpdateVisibility then ns:UpdateVisibility() else bar:SetShown(ns.db.showBar) end
 end
 
 function ns:UpdateSecure()
@@ -817,6 +855,10 @@ function ns:UpdateSecure()
 	end
 	buttons.Mount.spellID = mount
 	buttons.Mount:SetAttribute("spell", mount)
+
+	local tap = ns.BestSpell({ ranks = ns.Data.lifeTap })
+	buttons.LifeTap.spellID = tap
+	buttons.LifeTap:SetAttribute("spell", tap)
 
 	buttons.Ritual:SetAttribute("type2", ns.hasPortal and "spell" or NOOP)
 	buttons.Ritual:SetAttribute("spell2", ns.Data.portalOfSummoning)
@@ -884,6 +926,7 @@ function ns:UpdateUsable()
 		end
 	end
 	UpdateUsable(buttons.Mount, buttons.Mount.spellID)
+	UpdateUsable(buttons.LifeTap, buttons.LifeTap.spellID)
 	if ns.hasRitual then UpdateUsable(buttons.Ritual, ns.Data.ritualOfSummoning, true) end
 	SetSpellCooldown(buttons.Ritual, ns.hasPortal and ns.Data.portalOfSummoning or nil)
 end
@@ -935,21 +978,82 @@ function ns:UpdateVisuals()
 
 	buttons.Ritual.icon:SetTexture(SpellIcon(ns.Data.ritualOfSummoning) or 136223)
 
-	for _, key in ipairs({ "Healthstone", "Soulstone", "WeaponStone", "Mount", "Ritual" }) do
+	buttons.LifeTap.icon:SetTexture(SpellIcon(buttons.LifeTap.spellID) or 136126)
+	ns:UpdateLifeTapGlow()
+
+	for _, key in ipairs({ "Healthstone", "Soulstone", "WeaponStone", "LifeTap", "Mount", "Ritual" }) do
 		UpdateHotkey(buttons[key])
 	end
 	ns:UpdateUsable()
+end
+
+-- Life Tap -----------------------------------------------------------------------
+
+-- Mana gained per Life Tap, read from the spell's own description (it scales with
+-- Spirit in Forever). Health spent is the same amount.
+function ns:LifeTapAmount()
+	local spell = buttons.LifeTap and buttons.LifeTap.spellID
+	local desc = spell and C_Spell.GetSpellDescription(spell)
+	desc = ns.Safe(desc)
+	local amount = desc and desc:match("(%d+)")
+	return amount and tonumber(amount)
+end
+
+-- Out of combat, glow when mana is low but health is high: a good moment to tap.
+function ns:UpdateLifeTapGlow()
+	local tap = buttons.LifeTap
+	if not tap then return end
+	if not (ns.db.lifeTapReminder and tap.spellID) or InCombatLockdown() then return SetGlow(tap, false) end
+	local mana, maxMana = ns.Safe(UnitPower("player", Enum.PowerType.Mana)), ns.Safe(UnitPowerMax("player", Enum.PowerType.Mana))
+	local hp, maxHp = ns.Safe(UnitHealth("player")), ns.Safe(UnitHealthMax("player"))
+	if not (mana and maxMana and hp and maxHp) or maxMana == 0 or maxHp == 0 then return end
+	SetGlow(tap, mana / maxMana * 100 < ns.db.lifeTapMana and hp / maxHp * 100 > ns.db.lifeTapHealth)
+end
+
+-- Range ---------------------------------------------------------------------------
+
+-- Buttons whose spells go on an enemy target get a red tint when it's out of range.
+local function RangeButtons()
+	local list = {}
+	for _, key in ipairs({ "Curses", "Banes", "Control" }) do
+		local main = ns.menus[key]
+		if main then
+			if main.mode == "default" then table.insert(list, main) end
+			for _, b in ipairs(main.items) do
+				if b.spellID and b:IsVisible() then table.insert(list, b) end
+			end
+		end
+	end
+	return list
+end
+
+function ns:UpdateRange()
+	if not bar or not bar:IsVisible() then return end
+	local hostile = ns.db.rangeTint and UnitExists("target") and ns.Safe(UnitCanAttack("player", "target"))
+	for _, btn in ipairs(RangeButtons()) do
+		local inRange
+		if hostile and btn.spellID then inRange = C_Spell.IsSpellInRange(btn.spellID, "target") end
+		-- Range may be secret in combat; never compare it, just hand it to the tint.
+		if issecretvalue(inRange) or issecretvalue(btn.inRange) or btn.inRange ~= nil or inRange ~= nil then
+			Style.SetRange(btn, inRange)
+		end
+	end
 end
 
 -- Live updates for usability, mana and the soulstone countdown.
 ns:On("SPELL_UPDATE_USABLE", function() ns:UpdateUsable() end)
 ns:On("SPELL_UPDATE_COOLDOWN", function() ns:UpdateUsable() end)
 ns:On("UNIT_POWER_FREQUENT", function(_, unit)
-	if unit == "player" and ns.db and ns.db.bookMode == "mana" then ns:UpdateBook() end
+	if unit ~= "player" or not ns.db then return end
+	if ns.db.bookMode == "mana" then ns:UpdateBook() end
+	ns:UpdateLifeTapGlow()
 end)
 ns:On("UNIT_MAXPOWER", function(_, unit)
 	if unit == "player" and ns.db and ns.db.bookMode == "mana" then ns:UpdateBook() end
 end)
+ns:On("UNIT_HEALTH", function(_, unit) if unit == "player" then ns:UpdateLifeTapGlow() end end)
+ns:On("PLAYER_TARGET_CHANGED", function() ns:UpdateRange() end)
+C_Timer.NewTicker(0.25, function() ns:UpdateRange() end)
 C_Timer.NewTicker(1, function()
 	if ns.db and ns.db.bookMode == "soulstone" then ns:UpdateBook() end
 end)

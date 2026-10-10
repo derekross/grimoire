@@ -247,20 +247,21 @@ local function CheckTranceAura()
 	SetTrance(aura ~= nil)
 end
 
--- In combat, use the aura update payload when its fields aren't secret.
+-- In combat, use the aura update payload where its fields aren't secret. Any of it can
+-- be (the flag, the lists, each aura), so every piece is checked before it's used.
 local function OnAura(_, _, info)
 	if not trance then return end
-	if not InCombatLockdown() or not info or info.isFullUpdate then
-		return CheckTranceAura()
-	end
-	for _, aura in ipairs(info.addedAuras or {}) do
-		if ns.Safe(aura.spellId) == ns.Data.shadowTrance then
+	if not InCombatLockdown() then return CheckTranceAura() end
+	if not info then return end
+	for _, aura in ipairs(ns.Safe(info.addedAuras) or {}) do
+		aura = ns.Safe(aura)
+		if aura and ns.Safe(aura.spellId) == ns.Data.shadowTrance then
 			trance.instanceID = ns.Safe(aura.auraInstanceID)
 			SetTrance(true)
 		end
 	end
 	if trance.instanceID then
-		for _, id in ipairs(info.removedAuraInstanceIDs or {}) do
+		for _, id in ipairs(ns.Safe(info.removedAuraInstanceIDs) or {}) do
 			if ns.Safe(id) == trance.instanceID then
 				trance.instanceID = nil
 				SetTrance(false)

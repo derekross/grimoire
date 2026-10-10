@@ -8,6 +8,7 @@
 	<Binding name="CLICK GrimoireBanesButton:LeftButton" category="ADDONS"/>
 	<Binding name="CLICK GrimoireBanesButton:RightButton" category="ADDONS"/>
 	<Binding name="CLICK GrimoireBuffsButton:LeftButton" category="ADDONS"/>
+	<Binding name="CLICK GrimoireLifeTapButton:LeftButton" category="ADDONS"/>
 	<Binding name="CLICK GrimoireControlButton:LeftButton" category="ADDONS"/>
 	<Binding name="CLICK GrimoireDemonsButton:LeftButton" category="ADDONS"/>
 	<Binding name="CLICK GrimoireMountButton:LeftButton" category="ADDONS"/>

@@ -4,9 +4,16 @@
 ## Author: Derek Ross
 ## Version: @project-version@
 ## IconTexture: Interface\AddOns\Grimoire\Media\Icon
-## OptionalDeps: ElvUI
+## OptionalDeps: ElvUI, Masque
+## AddonCompartmentFunc: Grimoire_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: Grimoire_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: Grimoire_OnCompartmentLeave
 ## SavedVariables: GrimoireDB
 ## SavedVariablesPerCharacter: GrimoireCharDB
+
+Libs/LibStub/LibStub.lua
+Libs/CallbackHandler-1.0/CallbackHandler-1.0.lua
+Libs/LibDataBroker-1.1/LibDataBroker-1.1.lua
 
 Data.lua
 Core.lua
@@ -15,5 +22,8 @@ Buttons.lua
 Speech.lua
 Timers.lua
 Summon.lua
+Raid.lua
+Visibility.lua
+Broker.lua
 Options.lua
 ElvUI.lua

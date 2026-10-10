@@ -14,11 +14,17 @@ A warlock helper for **World of Warcraft: Forever**, in the spirit of Necrosis.
 - **Demon menu:** the demons you know. Shift-click casts Fel Domination first.
 - **Mount button:** your best warlock mount, Dreadsteed or Felsteed.
 - **Summoning:** left-click Ritual of Summoning, right-click Portal of Summoning, with a group announcement.
-- **Summon queue:** collects "123" / "summon" requests from group chat and whispers. Click a name to target and summon them. It shows offline, dead, and already-summoned players, and syncs with other Grimoire warlocks.
+- **Requests:** collects summon requests ("123", "summon") and healthstone requests ("hs") from group chat and whispers. Click a name to target and summon them, or to open a trade with a healthstone. It shows offline, dead, and already-summoned players, and syncs with other Grimoire warlocks.
+- **Warlocks panel** (shift-click the book, or `/grim raid`): every Grimoire warlock in your group, their curse, and who holds their soulstone. The leader or an assistant can click a curse to assign it, and that warlock's curse button switches to it.
+- **Life Tap button:** shows mana per tap and taps to full. Out of combat it glows when your mana is low and your health is high.
+- **Range:** curse, bane and crowd-control icons turn red when your target is out of range.
+- **Visibility:** always shown or only in combat, optionally hidden in cities and inns, and optional fading until you mouse over it.
+- **Tome colors:** Void, Shadow, Fel and Blood.
 - **Timers:** estimated Banish, Fear, Howl, Subjugate and Death Coil bars, started from your own casts, with warnings before Banish and Subjugate end.
 - **Shadow Trance alert** when Nightfall procs.
 - **Chat lines** for soulstones, demon summons and mounts. These go to party/raid only; Blizzard blocks addons from using /say in the open world.
-- **Keybindings** for every button: Key Bindings → AddOns → Grimoire.
+- **Keybindings** for every button: Key Bindings → AddOns → Grimoire. With ElvUI, `/kb` hover binding works on Grimoire buttons, including individual spells in the menus.
+- **Works with other addons:** a LibDataBroker feed (Titan Panel, Bazooka, ...), an entry in Blizzard's AddOns menu by the minimap, and Masque skins for square buttons.
 - **Ring layout:** the book in the center with the buttons in a circle around it, like Necrosis. Start angle, size and direction are adjustable. Menus open outward. Three styles:
   - **Grimoire** (default): Grimoire's own art. A leather tome with a fel sigil sits in an iron bezel whose 20 sockets light up with your soul shards, surrounded by iron-rimmed round buttons.
   - **Flat round:** thin-rimmed round buttons in your ElvUI colors.
@@ -45,6 +51,10 @@ Without ElvUI, Grimoire uses a plain look, and its settings are in Blizzard's Ad
 ## Limitations
 
 Forever applies retail's addon restrictions: auras, health and cooldowns are hidden from addons in combat. Crowd control timers are therefore estimates: they can't see early breaks or resists. DoT timers, threat and low-health alerts aren't possible; use the built-in Cooldown Manager for DoTs.
+
+## Bundled libraries
+
+`Libs/` contains LibStub (public domain), CallbackHandler-1.0 (BSD) and LibDataBroker-1.1 (public domain). Their licenses are unchanged.
 
 ## Art
 

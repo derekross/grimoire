@@ -22,6 +22,29 @@ ns.defaults = {
 	ringClockwise = true,
 	menuAutoHide = 2, -- seconds after the mouse leaves an open menu
 	bookMode = "shards", -- shards | soulstone | mana
+	tomeColor = "Void", -- Void | Shadow | Fel | Blood (Grimoire ring style)
+
+	-- Visibility
+	visibility = "always", -- always | combat
+	hideResting = false, -- hide in cities and inns (out of combat)
+	fadeOut = false, -- fade when the mouse isn't over the bar
+	fadeAlpha = 0.25,
+
+	rangeTint = true, -- red icons when the target is out of range
+	lifeTapReminder = true,
+	lifeTapMana = 50, -- glow Life Tap out of combat below this mana %...
+	lifeTapHealth = 70, -- ...when health is above this %
+
+	-- Other addons
+	broker = true, -- LibDataBroker feed (Titan Panel, Bazooka, ...)
+	masque = true, -- let Masque skin square buttons
+
+	-- Group coordination (Grimoire users share these over an addon channel)
+	acceptCurseAssignments = true,
+	shareSoulstones = true,
+	hsRequests = true,
+	hsKeywords = "hs, healthstone, hs pls, need hs",
+	hsAutoReply = true,
 	hidden = {}, -- bar button key -> true to hide it
 	shardLow = 3,
 	shardCap = 0, -- 0 = off
@@ -84,7 +107,7 @@ local unitEvents = {
 	UNIT_INVENTORY_CHANGED = true, UNIT_PET = true, UNIT_AURA = true,
 	UNIT_SPELLCAST_SENT = true, UNIT_SPELLCAST_START = true, UNIT_SPELLCAST_SUCCEEDED = true,
 	UNIT_SPELLCAST_FAILED = true, UNIT_SPELLCAST_INTERRUPTED = true,
-	UNIT_POWER_FREQUENT = true, UNIT_MAXPOWER = true,
+	UNIT_POWER_FREQUENT = true, UNIT_MAXPOWER = true, UNIT_HEALTH = true,
 }
 
 function ns:On(event, handler)
@@ -307,6 +330,7 @@ function ns:Refresh()
 	end
 	if ns.UpdateVisuals then ns:UpdateVisuals() end
 	if ns.UpdateDataText then ns:UpdateDataText() end
+	if ns.UpdateBroker then ns:UpdateBroker() end
 	ns:CheckShardCap()
 	ns:SortShards()
 end
@@ -408,6 +432,7 @@ function ns:TradeHealthstone()
 		ns.pendingTrade = GetTime()
 		InitiateTrade("target")
 	end
+	return true
 end
 
 function ns:PlaceHealthstoneInTrade()

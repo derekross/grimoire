@@ -76,6 +76,7 @@ ns.Data = {
 		{ ranks = { 6789, 17925, 17926 }, durations = { 3, 3, 3 } },        -- Death Coil
 	},
 	mounts = { 23161, 5784 }, -- Dreadsteed first, then Felsteed
+	lifeTap = { 1454, 1455, 1456, 11687, 11688, 11689 },
 
 	-- family = UnitCreatureFamily("pet"), used to show the active demon's icon.
 	demons = {

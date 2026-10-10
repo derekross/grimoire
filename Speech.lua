@@ -89,6 +89,7 @@ local function OnCastSucceeded(_, _, _, spellID)
 	ns.pendingSoulstone = nil
 	ns.char.lastSoulstone = { name = ss.name, time = time(), warned = nil }
 	if ns.StartSoulstoneTimer then ns:StartSoulstoneTimer() end
+	if ns.OnSoulstone then ns:OnSoulstone(ss.name) end
 	ns:UpdateVisuals()
 
 	if ss.name and ss.name ~= ns.SafeUnitName("player") then
