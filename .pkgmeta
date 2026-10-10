@@ -3,3 +3,4 @@ package-as: Grimoire
 ignore:
   - README.md
   - .github
+  - tools

@@ -293,6 +293,12 @@ local function CreateTrance()
 	icon:SetPoint("BOTTOMRIGHT", -2, 2)
 	icon:SetTexture(C_Spell.GetSpellTexture(ns.Data.shadowTrance) or 136223)
 	icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	if Style.IsArt() then
+		rim:Hide()
+		icon:SetPoint("TOPLEFT", 5, -5)
+		icon:SetPoint("BOTTOMRIGHT", -5, 5)
+		Style.ArtRim(trance)
+	end
 	if Style.IsRound() then
 		for _, tex in ipairs({ rim, icon }) do
 			local mask = trance:CreateMaskTexture()

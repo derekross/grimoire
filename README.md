@@ -19,7 +19,10 @@ A warlock helper for **World of Warcraft: Forever**, in the spirit of Necrosis.
 - **Shadow Trance alert** when Nightfall procs.
 - **Chat lines** for soulstones, demon summons and mounts. These go to party/raid only; Blizzard blocks addons from using /say in the open world.
 - **Keybindings** for every button: Key Bindings → AddOns → Grimoire.
-- **Ring layout:** the book in the center with round buttons in a circle around it, like Necrosis. Start angle, size and direction are adjustable. Menus open outward.
+- **Ring layout:** the book in the center with the buttons in a circle around it, like Necrosis. Start angle, size and direction are adjustable. Menus open outward. Three styles:
+  - **Grimoire** (default): Grimoire's own art. A leather tome with a fel sigil sits in an iron bezel whose 20 sockets light up with your soul shards, surrounded by iron-rimmed round buttons.
+  - **Flat round:** thin-rimmed round buttons in your ElvUI colors.
+  - **Square:** ElvUI's action-button style.
 - **Menus** close on their own shortly after the mouse leaves, even in combat. Right-click keeps a menu open (shift-right-click for Curses and Banes).
 - **At a glance:** icons turn blue when you're out of mana and grey when you can't cast them. Menu icons show their mana cost. Tooltips show soul shard costs.
 - **Book display:** soul shards, your soulstone countdown, or mana. Scroll the mouse wheel over the book to switch.
@@ -42,3 +45,7 @@ Without ElvUI, Grimoire uses a plain look, and its settings are in Blizzard's Ad
 ## Limitations
 
 Forever applies retail's addon restrictions: auras, health and cooldowns are hidden from addons in combat. Crowd control timers are therefore estimates: they can't see early breaks or resists. DoT timers, threat and low-health alerts aren't possible; use the built-in Cooldown Manager for DoTs.
+
+## Art
+
+All textures in `Media/` are original and drawn in code by `tools/art/draw.py` (needs Python cairo and ImageMagick). Run `python3 tools/art/draw.py Media` to regenerate them.

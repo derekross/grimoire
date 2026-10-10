@@ -16,7 +16,7 @@ ns.defaults = {
 	spacing = 4,
 	vertical = false,
 	ring = false, -- book in the center, buttons in a circle around it
-	roundButtons = true, -- round buttons in the ring layout
+	ringStyle = "grimoire", -- ring look: grimoire (Grimoire's art) | round (flat) | square
 	ringAngle = 90, -- degrees; 90 = first button at the top
 	ringRadius = 1,
 	ringClockwise = true,
@@ -450,7 +450,10 @@ local function OnLogin()
 		Grimoire:UnregisterAllEvents()
 		return
 	end
-	GrimoireDB = CopyDefaults(ns.defaults, GrimoireDB or {})
+	GrimoireDB = GrimoireDB or {}
+	if GrimoireDB.roundButtons == false then GrimoireDB.ringStyle = GrimoireDB.ringStyle or "square" end
+	GrimoireDB.roundButtons = nil -- replaced by ringStyle
+	GrimoireDB = CopyDefaults(ns.defaults, GrimoireDB)
 	GrimoireCharDB = GrimoireCharDB or {}
 	ns.db = GrimoireDB
 	ns.char = GrimoireCharDB

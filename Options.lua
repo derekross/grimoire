@@ -29,7 +29,7 @@ ns.optionList = {
 	{ key = "showBar", name = "Show bar", type = "toggle" },
 	{ key = "locked", name = "Lock bar", type = "toggle", desc = "Stops shift-drag on the book from moving the bar." },
 	{ key = "ring", name = "Ring layout", type = "toggle", desc = "Book in the center with the buttons in a circle around it, like Necrosis." },
-	{ key = "roundButtons", name = "Round buttons in the ring", type = "toggle", desc = "Changing this reloads the UI." },
+	{ key = "ringStyle", name = "Ring style", type = "select", values = { grimoire = "Grimoire (iron and tome)", round = "Flat round", square = "Square" }, order = { "grimoire", "round", "square" }, desc = "Changing this reloads the UI." },
 	{ key = "ringAngle", name = "Ring start angle", type = "range", min = 0, max = 345, step = 15, desc = "Where the first button sits. 90 is the top." },
 	{ key = "ringRadius", name = "Ring size", type = "range", min = 0.8, max = 1.6, step = 0.05 },
 	{ key = "ringClockwise", name = "Ring runs clockwise", type = "toggle" },
@@ -98,7 +98,7 @@ function ns:SetOptionValue(opt, value)
 	t[path[#path]] = value
 	if opt.key == "summonKeywords" and ns.ParseSummonKeywords then ns.ParseSummonKeywords() end
 	ns:ApplySettings()
-	if opt.key == "ring" or opt.key == "roundButtons" then ns.Style.CheckShapeChange() end
+	if opt.key == "ring" or opt.key == "ringStyle" then ns.Style.CheckShapeChange() end
 end
 
 -- Applies a changed setting; layout changes wait until combat ends.

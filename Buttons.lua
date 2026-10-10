@@ -88,10 +88,14 @@ local function SetGlow(btn, on)
 end
 ns.SetGlow = SetGlow
 
+-- Cooldowns. Addon code may not pass secret numbers (in combat) to a cooldown widget,
+-- so spells use the duration object the game provides for exactly this; item
+-- cooldowns have no such object, so they update only when readable and otherwise
+-- keep the sweep they already show.
 local function SetCooldown(btn, start, duration)
-	-- In combat these can be secret; the cooldown widget accepts them as-is.
-	local d = ns.Safe(duration)
-	if start and (d == nil or d > 0) then
+	start, duration = ns.Safe(start), ns.Safe(duration)
+	if start == nil or duration == nil then return end
+	if duration > 0 then
 		btn.cooldown:SetCooldown(start, duration)
 	else
 		btn.cooldown:Clear()
@@ -104,9 +108,9 @@ local function SetItemCooldown(btn, itemID)
 end
 
 local function SetSpellCooldown(btn, spellID)
-	local info = spellID and C_Spell.GetSpellCooldown(spellID)
-	if not info then return btn.cooldown:Clear() end
-	SetCooldown(btn, info.startTime, info.duration)
+	local duration = spellID and C_Spell.GetSpellCooldownDuration(spellID)
+	if not duration then return btn.cooldown:Clear() end
+	btn.cooldown:SetCooldownFromDurationObject(duration, true)
 end
 
 -- Tint only for reasons the player can act on: blue when out of mana, grey when the
@@ -308,6 +312,9 @@ function ns:UpdateBook()
 	local mode = ns.db.bookMode
 	local fill, text = book.fill, book.Count
 	local a = Style.theme.accent
+	-- The art look shows shards and soulstone time with the bezel's sockets; the liquid
+	-- fill is kept for mana, which can be secret in combat (sockets can't count it).
+	if book.pips then fill:SetShown(mode == "mana") end
 	if mode == "mana" then
 		local m = Style.theme.mana
 		Style.SetFillColor(fill, m[1], m[2], m[3])
@@ -315,12 +322,14 @@ function ns:UpdateBook()
 		fill:SetValue(UnitPower("player", Enum.PowerType.Mana))
 		-- Secret in combat; the widgets accept secret values, so the display keeps working.
 		text:SetFormattedText("%d%%", UnitPowerPercent("player", Enum.PowerType.Mana, true, CurveConstants.ScaleTo100))
+		Style.SetPips(book, 0)
 		text:SetTextColor(1, 1, 1)
 	elseif mode == "soulstone" then
 		local left = SoulstoneLeft()
 		Style.SetFillColor(fill, 0.85, 0.35, 0.85)
 		fill:SetMinMaxValues(0, 30 * 60)
 		fill:SetValue(left or 0)
+		Style.SetPips(book, left and math.ceil(left / (30 * 60) * #(book.pips or {})) or 0)
 		if not left then
 			text:SetText("-")
 			text:SetTextColor(0.6, 0.6, 0.6)
@@ -336,6 +345,7 @@ function ns:UpdateBook()
 		Style.SetFillColor(fill, a[1], a[2], a[3])
 		fill:SetMinMaxValues(0, full)
 		fill:SetValue(math.min(ns.shards, full))
+		Style.SetPips(book, ns.shards) -- one socket per shard, up to the 20 in the bezel
 		text:SetText(ns.shards)
 		if ns.shards == 0 then
 			text:SetTextColor(1, 0.27, 0.27)
@@ -621,7 +631,7 @@ end
 
 -- Runs once the theme is known (after ElvUI initializes, when it's loaded).
 function ns:ApplyStyle()
-	ns.loginRound = Style.IsRound() and true or false
+	ns.loginLook = Style.Look()
 	for _, btn in pairs(buttons) do
 		Style.Button(btn)
 		btn.glowing = nil

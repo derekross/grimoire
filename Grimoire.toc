@@ -3,7 +3,7 @@
 ## Notes: Warlock helper for WoW Forever: stones, shards, curses, banes, demons, summoning, timers and alerts.
 ## Author: Derek Ross
 ## Version: @project-version@
-## IconTexture: Interface\Icons\INV_Misc_Book_05
+## IconTexture: Interface\AddOns\Grimoire\Media\Icon
 ## OptionalDeps: ElvUI
 ## SavedVariables: GrimoireDB
 ## SavedVariablesPerCharacter: GrimoireCharDB
