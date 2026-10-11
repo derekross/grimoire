@@ -14,12 +14,11 @@ local MAX_ITEMS = 10
 
 -- Menu open/close, run in the secure environment so it also works in combat.
 --   open:  auto-hides a moment after the mouse leaves the button and the menu
---   pin:   stays open until the button is clicked again (right-click on toggle menus,
---          shift-right-click on Curse/Bane menus whose right-click picks a spell)
+--   pin:   shift-right-click keeps it open until the button is clicked again
 --   other menus close when one opens
 local TOGGLE_MENU = [[
 	local menu = self:GetFrameRef("menu")
-	local pin = button == "RightButton" and (self:GetAttribute("pinmode") == "right" or IsShiftKeyDown())
+	local pin = button == "RightButton" and IsShiftKeyDown()
 	if menu:IsShown() then
 		if pin and not menu:GetAttribute("pinned") then
 			menu:SetAttribute("pinned", true)
@@ -219,8 +218,8 @@ end
 
 -- Menus --------------------------------------------------------------------------
 
--- A menu is a main button plus a flyout of spell buttons. "toggle" menus open on any
--- click; "default" menus cast the last picked spell on left-click and open on right-click.
+-- A menu is a main button plus a flyout of spell buttons. Left-click casts the last
+-- picked spell (the default); right-click opens the menu to pick another.
 local function CreateMenu(key, entries, mode, opts)
 	opts = opts or {}
 	local main = CreateButton(key, MENU_TEMPLATE)
@@ -229,13 +228,7 @@ local function CreateMenu(key, entries, mode, opts)
 	main.entries = entries
 	main:SetAttribute("_grimoiremenu", TOGGLE_MENU)
 	main:SetAttribute("autohide", ns.db.menuAutoHide)
-	if mode == "toggle" then
-		main:SetAttribute("type", "grimoiremenu")
-		main:SetAttribute("pinmode", "right")
-	else
-		main:SetAttribute("type2", "grimoiremenu")
-		main:SetAttribute("pinmode", "shiftright")
-	end
+	main:SetAttribute("type2", "grimoiremenu")
 
 	local flyout = CreateFrame("Frame", "Grimoire" .. key .. "Menu", main, "SecureHandlerShowHideTemplate")
 	flyout:Hide()
@@ -565,41 +558,34 @@ function ns:CreateBar()
 	-- Spell menus
 	local curses = CreateMenu("Curses", ns.Data.curses, "default")
 	local banes = CreateMenu("Banes", ns.Data.banes, "default")
-	local buffs = CreateMenu("Buffs", ns.Data.buffs, "toggle")
-	local control = CreateMenu("Control", ns.Data.control, "toggle")
-	local demons = CreateMenu("Demons", ns.Data.demons, "toggle", { demon = true })
-	for _, main in ipairs({ curses, banes }) do
+	local buffs = CreateMenu("Buffs", ns.Data.buffs, "default")
+	local control = CreateMenu("Control", ns.Data.control, "default")
+	local demons = CreateMenu("Demons", ns.Data.demons, "default", { demon = true })
+	-- Every menu: left-click casts the default, right-click picks another.
+	for _, main in ipairs({ curses, banes, buffs, control, demons }) do
 		main:SetScript("OnEnter", function(btn)
 			TooltipAnchor(btn)
-			local spell = MenuDefault(btn)
+			local spell, entry = MenuDefault(btn)
 			if spell then GameTooltip:SetSpellByID(spell) else GameTooltip:AddLine(btn.title) end
-			GameTooltip:AddLine(" ")
-			AddHint("Left-click: cast the default")
-			AddHint("Right-click: choose another")
-			AddHint("Shift-right-click: keep the menu open")
-			GameTooltip:Show()
-		end)
-	end
-	for _, main in ipairs({ buffs, control, demons }) do
-		main:SetScript("OnEnter", function(btn)
-			TooltipAnchor(btn)
-			local a = Style.theme.accent
-			GameTooltip:AddLine(btn.title, a[1], a[2], a[3])
 			if btn == control and ns.creatureAlert then
+				GameTooltip:AddLine(" ")
 				GameTooltip:AddLine(ns.creatureAlert, 0.2, 1, 0.2)
 			end
 			if btn == buffs and btn.glowing then
+				GameTooltip:AddLine(" ")
 				GameTooltip:AddLine("You have no armor on.", 1, 0.27, 0.27)
 			end
 			if btn == demons then
 				local pet = UnitExists("pet") and ns.Safe(UnitCreatureFamily("pet"))
-				GameTooltip:AddDoubleLine("Current", pet or "none", 0.7, 0.7, 0.7, 1, 1, 1)
-				AddShardLine(true)
+				GameTooltip:AddLine(" ")
+				GameTooltip:AddDoubleLine("Current demon", pet or "none", 0.7, 0.7, 0.7, 1, 1, 1)
 			end
+			AddShardLine(entry and entry.shard)
 			GameTooltip:AddLine(" ")
-			AddHint("Left-click: open the menu")
-			AddHint("Right-click: keep it open")
-			if btn == demons and ns.hasFelDomination then AddHint("Shift-click a demon: Fel Domination first") end
+			AddHint("Left-click: cast the default")
+			if btn == demons and ns.hasFelDomination then AddHint("Shift-left-click: Fel Domination first") end
+			AddHint("Right-click: choose another")
+			AddHint("Shift-right-click: keep the menu open")
 			GameTooltip:Show()
 		end)
 	end
@@ -844,8 +830,13 @@ function ns:UpdateSecure()
 		if main.mode == "default" then
 			local spell = MenuDefault(main)
 			main.spellID = spell
-			main:SetAttribute("type1", spell and "spell" or NOOP)
-			main:SetAttribute("spell1", spell)
+			if key == "Demons" then -- a macro, so shift adds Fel Domination
+				main:SetAttribute("type1", spell and "macro" or NOOP)
+				main:SetAttribute("macrotext1", spell and DemonMacro(spell) or nil)
+			else
+				main:SetAttribute("type1", spell and "spell" or NOOP)
+				main:SetAttribute("spell1", spell)
+			end
 		end
 	end
 
@@ -957,21 +948,8 @@ function ns:UpdateVisuals()
 		UpdateHotkey(main)
 	end
 
-	local demon = ns.menus.Demons
-	local pet = UnitExists("pet") and ns.Safe(UnitCreatureFamily("pet"))
-	local icon
-	for _, d in ipairs(ns.demons) do
-		if pet and d.family == pet then icon = SpellIcon(d.spell) end
-	end
-	demon.icon:SetTexture(icon or (ns.demons[1] and SpellIcon(ns.demons[1].spell)) or 136082)
-
-	ns.menus.Buffs.icon:SetTexture(SpellIcon(ns.BestSpell(ns.Data.buffs[1])) or 136185)
 	ns:UpdateArmorGlow()
-
-	local control = ns.menus.Control
-	local banish = ns.BestSpell(ns.Data.control[1])
-	control.icon:SetTexture(SpellIcon(ns.creatureAlert and banish or ns.BestSpell(ns.Data.control[2])) or 136183)
-	SetGlow(control, ns.creatureAlert ~= nil)
+	SetGlow(ns.menus.Control, ns.creatureAlert ~= nil)
 
 	local mount = buttons.Mount
 	mount.icon:SetTexture(SpellIcon(mount.spellID) or 136103)

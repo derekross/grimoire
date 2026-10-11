@@ -321,7 +321,7 @@ function Style.Resize(btn, size)
 		btn.halo:SetSize(size * glow, size * glow)
 		btn.softGlow:SetSize(size * glow, size * glow)
 		if btn.pips then
-			local r, pipSize = size * PIP_RADIUS, math.max(6, size * 0.095)
+			local r, pipSize = size * PIP_RADIUS, math.max(8, size * 0.135)
 			for i, pip in ipairs(btn.pips) do
 				local angle = math.pi / 2 - (i - 1) * 2 * math.pi / PIPS
 				pip:SetSize(pipSize, pipSize)

@@ -51,7 +51,7 @@ ns.defaults = {
 	sortShards = true,
 	tradeOnRightClick = true,
 	weaponWarnMinutes = 5,
-	defaults = {}, -- menu key -> spell entry index picked as that menu's default
+	defaults = { Control = 2 }, -- menu key -> entry index picked as that menu's default (Control: Fear)
 	armorReminder = true,
 
 	-- Timers and alerts

@@ -194,9 +194,12 @@ def addon_icon(size, name):
 def pip(size, name):
     s, c = surface(size)
     sr, sg, sb = PAL["sigil"]
-    glow(c, 128, 128, 128, PAL["sigil"], 0.9)
-    c.arc(128, 128, 60, 0, TAU)
-    c.set_source(radial(c, 108, 108, 0, 70, [(0, (0.97, 1, 0.92, 1)), (0.45, (sr, sg, sb, 1)), (1, (sr * 0.25, sg * 0.4, sb * 0.25, 1))])); c.fill()
+    glow(c, 128, 128, 128, PAL["sigil"], 1.0)
+    # gem: bright core, saturated body, dark rim so it reads against the iron
+    c.arc(128, 128, 78, 0, TAU)
+    c.set_source(radial(c, 112, 110, 0, 86, [(0, (0.98, 1, 0.94, 1)), (0.4, (sr, sg, sb, 1)), (0.85, (sr * 0.45, sg * 0.55, sb * 0.45, 1)), (1, (0.02, 0.02, 0.02, 1))])); c.fill()
+    # specular glint
+    c.arc(104, 100, 18, 0, TAU); c.set_source_rgba(1, 1, 1, 0.55); c.fill()
     s.write_to_png(name)
 
 def use(palette):
