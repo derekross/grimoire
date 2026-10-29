@@ -362,7 +362,7 @@ end
 -- Shard cap ---------------------------------------------------------------------
 
 StaticPopupDialogs.GRIMOIRE_DELETE_SHARDS = {
-	text = "Grimoire: you have %d Soul Shards. Delete %d to get back to %d?",
+	text = "%s", -- StaticPopup only formats two arguments, so the message is built beforehand
 	button1 = DELETE,
 	button2 = CANCEL,
 	OnAccept = function(_, data) ns:DeleteShards(data) end,
@@ -383,22 +383,42 @@ function ns:CheckShardCap()
 	-- Prompt once per new shard count so a dismissed prompt doesn't nag.
 	if ns.lastCapPrompt == ns.shards then return end
 	ns.lastCapPrompt = ns.shards
-	StaticPopup_Show("GRIMOIRE_DELETE_SHARDS", ns.shards, extra, cap, extra)
+	local text = ("Grimoire: you have %d Soul Shards. Delete %d to get back to %d?"):format(ns.shards, extra, cap)
+	StaticPopup_Show("GRIMOIRE_DELETE_SHARDS", text, nil, extra)
 end
 
+-- True when the cursor holds the given item. Checked before every delete, so a slot
+-- that changed since it was scanned (a shard being sorted, say) never loses its item.
+local function CursorHolds(itemID)
+	local kind, id = GetCursorInfo()
+	return kind == "item" and id == itemID
+end
+
+-- Deletes up to count shards, loose ones before those in soul bags. The game only
+-- allows DeleteCursorItem from a player click, so this runs from the popup's button.
 function ns:DeleteShards(count)
-	if InCombatLockdown() then return end
+	if InCombatLockdown() or not count or count <= 0 then return end
+	local slots = ns:ShardSlots()
+	table.sort(slots, function(a, b)
+		local sa, sb = IsSoulBag(a.bag), IsSoulBag(b.bag)
+		if sa ~= sb then return sb end
+		if a.bag ~= b.bag then return a.bag > b.bag end
+		return a.slot > b.slot
+	end)
 	ClearCursor()
 	local deleted = 0
-	for _, pos in ipairs(ns:ShardSlots()) do
+	for _, pos in ipairs(slots) do
 		if deleted >= count then break end
 		C_Container.PickupContainerItem(pos.bag, pos.slot)
-		if CursorHasItem() then
+		if CursorHolds(ns.Data.soulShard) then
 			DeleteCursorItem()
 			deleted = deleted + 1
 		end
+		ClearCursor()
 	end
-	ClearCursor()
+	if deleted < count then
+		ns.Print(("Deleted %d of %d shards; some were locked. Try again in a moment."):format(deleted, count))
+	end
 end
 
 -- Stone upgrade (delete the outdated stone) ------------------------------------
@@ -413,7 +433,7 @@ StaticPopupDialogs.GRIMOIRE_DELETE_STONE = {
 		if not stone then return end
 		ClearCursor()
 		C_Container.PickupContainerItem(stone.bag, stone.slot)
-		if CursorHasItem() then DeleteCursorItem() end
+		if CursorHolds(stone.itemID) then DeleteCursorItem() end
 		ClearCursor()
 	end,
 	timeout = 0,
