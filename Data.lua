@@ -75,6 +75,10 @@ ns.Data = {
 		{ ranks = { 1098, 11725, 11726 }, durations = { 300, 300, 300 }, subjugate = true, shard = true }, -- Subjugate Demon
 		{ ranks = { 6789, 17925, 17926 }, durations = { 3, 3, 3 } },        -- Death Coil
 	},
+	-- Fear and Howl of Terror, greyed out when the target can't be feared.
+	fearSpells = { [5782] = true, [6213] = true, [6215] = true, [5484] = true, [17928] = true },
+	-- Buffs that make a target immune to Fear: Fear Ward, Will of the Forsaken, Berserker Rage.
+	fearImmunity = { 6346, 7744, 18499 },
 	mounts = { 23161, 5784 }, -- Dreadsteed first, then Felsteed
 	lifeTap = { 1454, 1455, 1456, 11687, 11688, 11689 },
 

@@ -67,6 +67,7 @@ ns.optionList = {
 	{ key = "timers", name = "Crowd control timers", type = "toggle", desc = "Estimated from your own casts; can't see early breaks." },
 	{ key = "soulstoneTimer", name = "Soulstone timer", type = "toggle" },
 	{ key = "creatureAlert", name = "Banish/Subjugate target alert", type = "toggle" },
+	{ key = "fearAlert", name = "Fear immunity alert", type = "toggle", desc = "Grey out Fear and Howl of Terror when the target likely can't be feared." },
 	{ key = "shadowTranceAlert", name = "Shadow Trance alert", type = "toggle" },
 	{ key = "shadowTranceSound", name = "Shadow Trance sound", type = "toggle" },
 

@@ -58,6 +58,7 @@ ns.defaults = {
 	timers = true,
 	soulstoneTimer = true,
 	creatureAlert = true,
+	fearAlert = true,
 	shadowTranceAlert = true,
 	shadowTranceSound = true,
 
@@ -307,13 +308,27 @@ function ns:WeaponEnchantState()
 	return best and best / 1000 or nil -- seconds left, or nil when none
 end
 
+-- Reads one aura by spell ID. The aura API can raise an error itself when the data is
+-- secret (seen on Retail), so the call is protected. Returns aura, readable: when
+-- readable is false the aura may or may not be there.
+function ns.ReadAura(unit, spellID)
+	local ok, aura
+	if unit == "player" then
+		ok, aura = pcall(C_UnitAuras.GetPlayerAuraBySpellID, spellID)
+	else
+		ok, aura = pcall(C_UnitAuras.GetUnitAuraBySpellID, unit, spellID)
+	end
+	if not ok or issecretvalue(aura) then return nil, false end
+	return aura, true
+end
+
 -- True when the player has none of the given spell IDs as an aura. Only meaningful
 -- out of combat, where aura data isn't secret; returns nil when it can't tell.
 function ns:MissingAura(spellIDs)
 	if InCombatLockdown() then return nil end
 	for _, id in ipairs(spellIDs) do
-		local aura = C_UnitAuras.GetPlayerAuraBySpellID(id)
-		if issecretvalue(aura) then return nil end
+		local aura, readable = ns.ReadAura("player", id)
+		if not readable then return nil end
 		if aura then return false end
 	end
 	return true

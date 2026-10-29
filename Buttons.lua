@@ -571,6 +571,10 @@ function ns:CreateBar()
 				GameTooltip:AddLine(" ")
 				GameTooltip:AddLine(ns.creatureAlert, 0.2, 1, 0.2)
 			end
+			if btn == control and ns.fearAlert then
+				GameTooltip:AddLine(" ")
+				GameTooltip:AddLine(ns.fearAlert, 1, 0.27, 0.27)
+			end
 			if btn == buffs and btn.glowing then
 				GameTooltip:AddLine(" ")
 				GameTooltip:AddLine("You have no armor on.", 1, 0.27, 0.27)
@@ -920,6 +924,15 @@ function ns:UpdateUsable()
 	UpdateUsable(buttons.LifeTap, buttons.LifeTap.spellID)
 	if ns.hasRitual then UpdateUsable(buttons.Ritual, ns.Data.ritualOfSummoning, true) end
 	SetSpellCooldown(buttons.Ritual, ns.hasPortal and ns.Data.portalOfSummoning or nil)
+end
+
+-- Re-tint the Control menu when the fear alert changes. Called directly rather than
+-- through UpdateUsable, which skips buttons whose usability is secret in combat.
+function ns:UpdateFearTint()
+	local control = ns.menus and ns.menus.Control
+	if not control then return end
+	Style.Tint(control)
+	for _, b in ipairs(control.items) do Style.Tint(b) end
 end
 
 function ns:UpdateVisuals()

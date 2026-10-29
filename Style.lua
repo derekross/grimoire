@@ -367,15 +367,20 @@ end
 -- range can be secret in combat, in which case the widget picks the color itself.
 local issecretvalue = issecretvalue or function() return false end
 
+-- Fear spells grey out like unusable ones while the target can't be feared.
+local function FearBlocked(btn)
+	return ns.fearAlert ~= nil and btn.spellID ~= nil and ns.Data.fearSpells[btn.spellID]
+end
+
 local function BaseColor(btn)
 	local t = Style.theme
 	if btn.usableState == "nopower" then return t.noPower[1], t.noPower[2], t.noPower[3] end
-	if btn.usableState == "unusable" then return t.notUsable[1] + 0.3, t.notUsable[2] + 0.3, t.notUsable[3] + 0.3 end
+	if btn.usableState == "unusable" or FearBlocked(btn) then return t.notUsable[1] + 0.3, t.notUsable[2] + 0.3, t.notUsable[3] + 0.3 end
 	return 1, 1, 1
 end
 
 function Style.Tint(btn)
-	btn.icon:SetDesaturated(btn.usableState == "unusable")
+	btn.icon:SetDesaturated(btn.usableState == "unusable" or FearBlocked(btn) or false)
 	local r, g, b = BaseColor(btn)
 	local inRange = btn.inRange
 	if ns.db.rangeTint and (issecretvalue(inRange) or inRange ~= nil) then

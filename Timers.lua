@@ -220,6 +220,38 @@ local function UpdateCreatureAlert()
 	end
 end
 
+-- Fear alert --------------------------------------------------------------------------
+
+-- Undead and Mechanical NPCs, and bosses, are generally immune to Fear; a player with
+-- one of these buffs is immune while it lasts. Target auras can be secret in combat,
+-- in which case the buff check just doesn't fire.
+local function UpdateFearAlert()
+	local alert
+	if ns.db.fearAlert and UnitExists("target") and UnitCanAttack("player", "target") and not UnitIsDead("target") then
+		if not UnitIsPlayer("target") then
+			local kind = ns.Safe(UnitCreatureType("target"))
+			local class = ns.Safe(UnitClassification("target"))
+			if kind == "Undead" or kind == "Mechanical" then
+				alert = kind .. ": usually immune to Fear."
+			elseif class == "worldboss" or ns.Safe(UnitLevel("target")) == -1 then
+				alert = "Boss: likely immune to Fear."
+			end
+		end
+		if not alert then
+			for _, id in ipairs(ns.Data.fearImmunity) do
+				if ns.ReadAura("target", id) then
+					alert = ("%s: immune to Fear."):format(C_Spell.GetSpellName(id) or "Buff")
+					break
+				end
+			end
+		end
+	end
+	if alert ~= ns.fearAlert then
+		ns.fearAlert = alert
+		ns:UpdateFearTint()
+	end
+end
+
 -- Shadow Trance ---------------------------------------------------------------------
 
 local trance
@@ -242,8 +274,8 @@ end
 -- Out of combat the aura can be read directly.
 local function CheckTranceAura()
 	if InCombatLockdown() then return end
-	local aura = C_UnitAuras.GetPlayerAuraBySpellID(ns.Data.shadowTrance)
-	if issecretvalue and issecretvalue(aura) then return end
+	local aura, readable = ns.ReadAura("player", ns.Data.shadowTrance)
+	if not readable then return end
 	SetTrance(aura ~= nil)
 end
 
@@ -341,6 +373,12 @@ ns:On("UNIT_SPELLCAST_SENT", OnSent)
 ns:On("UNIT_SPELLCAST_SUCCEEDED", OnSucceeded)
 ns:On("PLAYER_TARGET_CHANGED", UpdateCreatureAlert)
 ns:On("PLAYER_ENTERING_WORLD", UpdateCreatureAlert)
+ns:On("PLAYER_TARGET_CHANGED", UpdateFearAlert)
+ns:On("PLAYER_ENTERING_WORLD", UpdateFearAlert)
+-- Core's UNIT_AURA only watches the player, so the target gets its own listener.
+local targetAuras = CreateFrame("Frame")
+targetAuras:RegisterUnitEvent("UNIT_AURA", "target")
+targetAuras:SetScript("OnEvent", function() if ns.db then UpdateFearAlert() end end)
 ns:On("SPELL_ACTIVATION_OVERLAY_SHOW", function(_, spellID)
 	if ns.Safe(spellID) == ns.Data.shadowTrance then SetTrance(true) end
 end)
