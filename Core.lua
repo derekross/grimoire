@@ -49,6 +49,7 @@ ns.defaults = {
 	shardLow = 3,
 	shardCap = 0, -- 0 = off
 	sortShards = true,
+	shardBag = "soul", -- soul = soul bags only; "0".."4" = that bag as well
 	tradeOnRightClick = true,
 	weaponWarnMinutes = 5,
 	defaults = { Control = 2 }, -- menu key -> entry index picked as that menu's default (Control: Fear)
@@ -267,34 +268,67 @@ function ns:ShardSlots()
 	return slots
 end
 
--- Moves one stray shard into a soul bag per bag update; the next BAG_UPDATE_DELAYED
--- moves the next one, which keeps us clear of item locks.
+-- Where shards belong: soul bags always, plus the bag picked in the options.
+local function IsShardHome(bag)
+	return IsSoulBag(bag) or tostring(bag) == ns.db.shardBag
+end
+
+-- Moves one stray shard home per bag update; the next BAG_UPDATE_DELAYED moves the
+-- next one, which keeps us clear of item locks. Runs while the option is on, or
+-- once through after a manual sort (ns:SortShardsNow).
 function ns:SortShards()
-	if not ns.db.sortShards or InCombatLockdown() or CursorHasItem() then return end
+	if not (ns.db.sortShards or ns.sortingNow) or InCombatLockdown() or CursorHasItem() then return end
+	local stray
+	for _, pos in ipairs(ns:ShardSlots()) do
+		if not IsShardHome(pos.bag) then
+			stray = pos
+			break
+		end
+	end
 	local target
-	for bag = 1, NUM_BAG_SLOTS do
-		if IsSoulBag(bag) then
-			for slot = 1, C_Container.GetContainerNumSlots(bag) do
-				if not C_Container.GetContainerItemInfo(bag, slot) then
-					target = { bag = bag, slot = slot }
-					break
+	if stray then
+		for bag = 0, NUM_BAG_SLOTS do
+			if IsShardHome(bag) then
+				for slot = 1, C_Container.GetContainerNumSlots(bag) do
+					if not C_Container.GetContainerItemInfo(bag, slot) then
+						target = { bag = bag, slot = slot }
+						break
+					end
 				end
 			end
-		end
-		if target then break end
-	end
-	if not target then return end
-	for _, pos in ipairs(ns:ShardSlots()) do
-		if not IsSoulBag(pos.bag) then
-			local info = C_Container.GetContainerItemInfo(pos.bag, pos.slot)
-			if info and not ns.Safe(info.isLocked) then
-				C_Container.PickupContainerItem(pos.bag, pos.slot)
-				C_Container.PickupContainerItem(target.bag, target.slot)
-				ClearCursor()
-			end
-			return
+			if target then break end
 		end
 	end
+	if stray and target then
+		local info = C_Container.GetContainerItemInfo(stray.bag, stray.slot)
+		if info and not ns.Safe(info.isLocked) then
+			C_Container.PickupContainerItem(stray.bag, stray.slot)
+			C_Container.PickupContainerItem(target.bag, target.slot)
+			ClearCursor()
+		end
+		return
+	end
+	if ns.sortingNow then
+		ns.sortingNow = nil
+		ns.Print(stray and "No free slot left in your shard bags." or "Shards sorted.")
+	end
+end
+
+function ns:SortShardsNow()
+	if InCombatLockdown() then return ns.Print("Can't move shards in combat.") end
+	ns.sortingNow = true
+	ns:SortShards()
+end
+
+-- Mouse-wheel step for the shard cap; updates the book without popping the delete
+-- prompt mid-scroll (it comes up on the next bag update instead).
+function ns:StepShardCap(delta)
+	local cap = math.max(0, math.min(32, (ns.db.shardCap or 0) + delta))
+	if cap == ns.db.shardCap then return end
+	ns.db.shardCap = cap
+	ns.lastCapPrompt = nil
+	StaticPopup_Hide("GRIMOIRE_DELETE_SHARDS")
+	if ns.UpdateVisuals then ns:UpdateVisuals() end
 end
 
 -- Main hand temporary enchant (Firestone/Spellstone in Forever).

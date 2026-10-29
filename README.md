@@ -4,7 +4,7 @@ A warlock helper for **World of Warcraft: Forever**, in the spirit of Necrosis.
 
 ## Features
 
-- **The grimoire:** a tome on the bar showing your soul shard count. It fills with fel light as shards build up. It also tracks shards gained this session, can sort shards into a soul bag, and has an optional cap that offers to delete extra shards (always asking first).
+- **The grimoire:** a tome on the bar showing your soul shard count. It fills with fel light as shards build up. It also tracks shards gained this session, can sort shards into a soul bag or a bag you choose (Ctrl-click to sort now), and has an optional cap that offers to delete extra shards (always asking first; Ctrl-mouse wheel sets it).
 - **Healthstone:** creates your highest learned rank, or uses the stone in your bags. Glows when your stone is outdated; shift-right-click deletes it (with a prompt) so you can make the new rank. Right-click trades it to your friendly target.
 - **Soulstone:** creates the stone, or uses it on your mouseover, then your target, then yourself. A 30-minute timer warns you before it expires. Optionally announces the soulstone to your group and whispers the target.
 - **Weapon stone:** left-click for Firestone, right-click for Spellstone. Creates the stone or applies it to your main hand, and glows when the enchant is missing or about to expire.

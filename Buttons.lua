@@ -419,7 +419,9 @@ local function BookTooltip(btn)
 		AddHint("Left-click: requests (summons, healthstones)")
 	end
 	AddHint("Shift-left-click: warlocks in your group")
+	AddHint("Ctrl-left-click: sort shards into your shard bags")
 	AddHint("Mouse wheel: shards / soulstone / mana")
+	AddHint(("Ctrl-mouse wheel: shard cap (%s)"):format(ns.db.shardCap > 0 and ns.db.shardCap or "off"))
 	AddHint("Right-click: options")
 	if not ns.db.locked then AddHint("Shift-drag: move") end
 	GameTooltip:Show()
@@ -448,7 +450,14 @@ function ns:CreateBar()
 	book:RegisterForClicks("AnyUp")
 	book:RegisterForDrag("LeftButton")
 	book:EnableMouseWheel(true)
-	book:SetScript("OnMouseWheel", function(_, delta) ns:CycleBookMode(delta > 0 and 1 or -1) end)
+	book:SetScript("OnMouseWheel", function(btn, delta)
+		if IsControlKeyDown() then
+			ns:StepShardCap(delta > 0 and 1 or -1)
+			if GameTooltip:GetOwner() == btn then BookTooltip(btn) end
+		else
+			ns:CycleBookMode(delta > 0 and 1 or -1)
+		end
+	end)
 	book:SetScript("OnClick", function(btn, mouse)
 		if btn.dragged then -- the release of a shift-drag, not a click
 			btn.dragged = nil
@@ -458,6 +467,8 @@ function ns:CreateBar()
 			SlashCmdList.GRIMOIRE("")
 		elseif IsShiftKeyDown() then
 			if ns.ToggleRaidPanel then ns:ToggleRaidPanel() end
+		elseif IsControlKeyDown() then
+			ns:SortShardsNow()
 		elseif ns.db.shardCap > 0 and ns.shards > ns.db.shardCap then
 			ns.lastCapPrompt = nil
 			ns:CheckShardCap()
