@@ -158,6 +158,13 @@ local function OnSent(_, _, target, castGUID, spellID)
 	end
 end
 
+local function OnCastEnded(_, _, castGUID)
+	castGUID = ns.Safe(castGUID)
+	if castGUID then sent[castGUID] = nil end
+end
+ns:On("UNIT_SPELLCAST_FAILED", OnCastEnded)
+ns:On("UNIT_SPELLCAST_INTERRUPTED", OnCastEnded)
+
 local function OnSucceeded(_, _, castGUID, spellID)
 	castGUID, spellID = ns.Safe(castGUID), ns.Safe(spellID)
 	if not (castGUID and spellID and ns.db.timers) then return end
@@ -204,7 +211,7 @@ end
 
 local function UpdateCreatureAlert()
 	local alert
-	if ns.db.creatureAlert and UnitExists("target") and UnitCanAttack("player", "target") then
+	if ns.db.creatureAlert and UnitExists("target") and ns.Safe(UnitCanAttack("player", "target")) then
 		local kind = ns.Safe(UnitCreatureType("target"))
 		local banish = ns.BestSpell(ns.Data.control[1])
 		local subjugate = ns.BestSpell(ns.Data.control[4])
@@ -227,8 +234,8 @@ end
 -- in which case the buff check just doesn't fire.
 local function UpdateFearAlert()
 	local alert
-	if ns.db.fearAlert and UnitExists("target") and UnitCanAttack("player", "target") and not UnitIsDead("target") then
-		if not UnitIsPlayer("target") then
+	if ns.db.fearAlert and UnitExists("target") and ns.Safe(UnitCanAttack("player", "target")) and not ns.Safe(UnitIsDead("target")) then
+		if not ns.Safe(UnitIsPlayer("target")) then
 			local kind = ns.Safe(UnitCreatureType("target"))
 			local class = ns.Safe(UnitClassification("target"))
 			if kind == "Undead" or kind == "Mechanical" then
@@ -389,6 +396,6 @@ ns:On("UNIT_AURA", OnAura)
 -- Shadow Bolt consumes the proc; if the aura can't be read in combat, clear on the next bolt.
 ns:On("UNIT_SPELLCAST_SUCCEEDED", function(_, _, _, spellID)
 	local name = ns.Safe(spellID) and C_Spell.GetSpellName(spellID)
-	if name == "Shadow Bolt" and trance and trance.active then SetTrance(false) end
+	if name and name == C_Spell.GetSpellName(ns.Data.shadowBolt) and trance and trance.active then SetTrance(false) end
 end)
 ns:On("PLAYER_REGEN_ENABLED", function() if trance then CheckTranceAura() end end)

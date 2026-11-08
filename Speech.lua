@@ -51,8 +51,8 @@ local function IsSpell(spellID, entryList)
 	end
 end
 
-local function OnCastStart(_, _, _, spellID)
-	spellID = ns.Safe(spellID)
+-- Ritual of Summoning can start as a cast or a channel; the first event wins.
+local function OnRitualStart(spellID)
 	local ritual = ns.pendingRitual
 	if ritual and GetTime() - ritual.time < 2
 		and (spellID == nil or spellID == ns.Data.ritualOfSummoning or spellID == ns.Data.portalOfSummoning) then
@@ -64,6 +64,11 @@ local function OnCastStart(_, _, _, spellID)
 		end
 		if ritual.name and ns.OnSummonCast then ns:OnSummonCast(ritual.name) end
 	end
+end
+
+local function OnCastStart(_, _, _, spellID)
+	spellID = ns.Safe(spellID)
+	OnRitualStart(spellID)
 
 	if spellID and ns.db.speech.demon then
 		local demon = IsSpell(spellID, ns.Data.demons)
@@ -102,5 +107,15 @@ local function OnCastSucceeded(_, _, _, spellID)
 	end
 end
 
+local function OnCastFailed(_, _, _, spellID)
+	local ss = ns.pendingSoulstone
+	if not ss then return end
+	spellID = ns.Safe(spellID)
+	local name = spellID and C_Spell.GetSpellName(spellID)
+	if spellID == nil or (name and name:find(ns.Data.soulstoneKeyword)) then ns.pendingSoulstone = nil end
+end
+
 ns:On("UNIT_SPELLCAST_START", OnCastStart)
+ns:On("UNIT_SPELLCAST_CHANNEL_START", function(_, _, _, spellID) OnRitualStart(ns.Safe(spellID)) end)
 ns:On("UNIT_SPELLCAST_SUCCEEDED", OnCastSucceeded)
+ns:On("UNIT_SPELLCAST_FAILED", OnCastFailed)

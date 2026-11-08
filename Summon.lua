@@ -179,7 +179,7 @@ local function OnChat(_, msg, sender)
 end
 
 local function OnAddonMessage(_, prefix, msg, _, sender)
-	if prefix ~= PREFIX or not ns.db.summonSync then return end
+	if ns.Safe(prefix) ~= PREFIX or not ns.db.summonSync then return end
 	msg, sender = ns.Safe(msg), ns.Safe(sender)
 	if not msg or ShortName(sender) == ns.SafeUnitName("player") then return end
 	local name = msg:match("^DONE:(.+)$")
@@ -231,7 +231,7 @@ ns:Module(function()
 		ns.Style.Font(row.text, 11)
 		row.text:SetPoint("LEFT", row.icon, "RIGHT", 4, 0)
 		row:SetScript("PreClick", function(self, mouse, down)
-			if not down and mouse == "LeftButton" and self.kind == "summon" and ns.NoteRitualClick then
+			if mouse == "LeftButton" and self.kind == "summon" and ns.NoteRitualClick then
 				ns:NoteRitualClick(self.name, IsShiftKeyDown())
 			end
 		end)

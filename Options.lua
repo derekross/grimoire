@@ -142,7 +142,7 @@ function ns:ApplySettings()
 	if ns.buttons.Book then ns.Style.UpdateTome(ns.buttons.Book) end
 	ns:UpdateVisuals()
 	ns:UpdateRange()
-	ns:CheckShardCap()
+	ns:RequestShardCapCheck()
 end
 
 function ns:SetOption(key, value)

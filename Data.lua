@@ -40,6 +40,7 @@ ns.Data = {
 
 	portalOfSummoning = 437169,
 	shadowTrance = 17941, -- Nightfall proc aura
+	shadowBolt = 686, -- rank 1; every rank shares the name
 
 	-- Menus: each entry lists every rank; the highest known one is cast.
 	curses = {

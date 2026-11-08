@@ -279,8 +279,20 @@ end
 
 -- Messages --------------------------------------------------------------------------
 
+-- One HIBACK answers every HI that arrives while it waits, with a random delay so a
+-- raid of warlocks doesn't all reply on the same frame.
+local helloBackPending
+local function ScheduleHelloBack()
+	if helloBackPending then return end
+	helloBackPending = true
+	C_Timer.After(0.5 + math.random() * 2.5, function()
+		helloBackPending = nil
+		Hello(true)
+	end)
+end
+
 local function OnAddonMessage(_, prefix, msg, _, sender)
-	if prefix ~= PREFIX then return end
+	if ns.Safe(prefix) ~= PREFIX then return end
 	msg, sender = ns.Safe(msg), ns.Safe(sender)
 	if not (msg and sender) then return end
 	sender = Ambiguate(sender, "none")
@@ -294,7 +306,7 @@ local function OnAddonMessage(_, prefix, msg, _, sender)
 		roster[sender].version = version
 		roster[sender].curse = tonumber(curse)
 		-- Always answer a HI (they may have just reloaded); HIBACK never answers, so no loop.
-		if kind == "HI" then Hello(true) end
+		if kind == "HI" then ScheduleHelloBack() end
 	elseif kind == "CURSE" then
 		roster[sender] = roster[sender] or {}
 		roster[sender].curse = tonumber(rest)
@@ -307,7 +319,7 @@ local function OnAddonMessage(_, prefix, msg, _, sender)
 	elseif kind == "ASSIGN" then
 		local who, index = rest:match("^(.+):(%d+)$")
 		index = tonumber(index)
-		if who == Me() and index and index <= ASSIGNABLE and ns.db.acceptCurseAssignments and CanAssign(sender) then
+		if who and Ambiguate(who, "none") == Me() and index and index <= ASSIGNABLE and ns.db.acceptCurseAssignments and CanAssign(sender) then
 			ns:ApplyCurseAssignment(index, sender)
 		end
 	end

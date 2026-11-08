@@ -108,7 +108,7 @@ local handlers = {}
 local unitEvents = {
 	UNIT_INVENTORY_CHANGED = true, UNIT_PET = true, UNIT_AURA = true,
 	UNIT_SPELLCAST_SENT = true, UNIT_SPELLCAST_START = true, UNIT_SPELLCAST_SUCCEEDED = true,
-	UNIT_SPELLCAST_FAILED = true, UNIT_SPELLCAST_INTERRUPTED = true,
+	UNIT_SPELLCAST_FAILED = true, UNIT_SPELLCAST_INTERRUPTED = true, UNIT_SPELLCAST_CHANNEL_START = true,
 	UNIT_POWER_FREQUENT = true, UNIT_MAXPOWER = true, UNIT_HEALTH = true,
 }
 
@@ -247,7 +247,7 @@ function ns:ScanBags()
 	for _, stone in pairs(stones) do
 		stone.count = C_Item.GetItemCount(stone.itemID)
 	end
-	if ns.shards and shards > ns.shards and ns.sessionShards then
+	if ns.shards and shards > ns.shards and ns.sessionShards and GetTime() > (ns.sessionStart or 0) then
 		ns.sessionShards = ns.sessionShards + (shards - ns.shards)
 	end
 	ns.shards, ns.stones = shards, stones
@@ -399,7 +399,12 @@ StaticPopupDialogs.GRIMOIRE_DELETE_SHARDS = {
 	text = "%s", -- StaticPopup only formats two arguments, so the message is built beforehand
 	button1 = DELETE,
 	button2 = CANCEL,
-	OnAccept = function(_, data) ns:DeleteShards(data) end,
+	OnAccept = function(_, data)
+		-- The count may have changed since the prompt; never go below the cap.
+		ns:ScanBags()
+		local extra = ns.shards - (ns.db.shardCap or 0)
+		if ns.db.shardCap > 0 and extra > 0 then ns:DeleteShards(math.min(data or 0, extra)) end
+	end,
 	timeout = 0,
 	whileDead = true,
 	hideOnEscape = true,
@@ -408,10 +413,14 @@ StaticPopupDialogs.GRIMOIRE_DELETE_SHARDS = {
 
 function ns:CheckShardCap()
 	local cap = ns.db and ns.db.shardCap or 0
-	if cap <= 0 or InCombatLockdown() then return end
+	if cap <= 0 or InCombatLockdown() then
+		StaticPopup_Hide("GRIMOIRE_DELETE_SHARDS")
+		return
+	end
 	local extra = ns.shards - cap
 	if extra <= 0 then
 		ns.lastCapPrompt = nil
+		StaticPopup_Hide("GRIMOIRE_DELETE_SHARDS")
 		return
 	end
 	-- Prompt once per new shard count so a dismissed prompt doesn't nag.
@@ -419,6 +428,15 @@ function ns:CheckShardCap()
 	ns.lastCapPrompt = ns.shards
 	local text = ("Grimoire: you have %d Soul Shards. Delete %d to get back to %d?"):format(ns.shards, extra, cap)
 	StaticPopup_Show("GRIMOIRE_DELETE_SHARDS", text, nil, extra)
+end
+
+local capCheckTimer
+function ns:RequestShardCapCheck()
+	if capCheckTimer then capCheckTimer:Cancel() end
+	capCheckTimer = C_Timer.NewTimer(1, function()
+		capCheckTimer = nil
+		ns:CheckShardCap()
+	end)
 end
 
 -- True when the cursor holds the given item. Checked before every delete, so a slot
@@ -443,10 +461,17 @@ function ns:DeleteShards(count)
 	local deleted = 0
 	for _, pos in ipairs(slots) do
 		if deleted >= count then break end
-		C_Container.PickupContainerItem(pos.bag, pos.slot)
+		local info = C_Container.GetContainerItemInfo(pos.bag, pos.slot)
+		local stack = info and ns.Safe(info.stackCount) or 1
+		local take = math.min(stack, count - deleted)
+		if take < stack then
+			C_Container.SplitContainerItem(pos.bag, pos.slot, take)
+		else
+			C_Container.PickupContainerItem(pos.bag, pos.slot)
+		end
 		if CursorHolds(ns.Data.soulShard) then
 			DeleteCursorItem()
-			deleted = deleted + 1
+			deleted = deleted + take
 		end
 		ClearCursor()
 	end
@@ -505,11 +530,12 @@ function ns:TradeHealthstone()
 end
 
 function ns:PlaceHealthstoneInTrade()
+	ns:ScanBags() -- the slot may have changed since the last scan
 	local stone = ns.stones.healthstone
 	if not stone then return end
 	ClearCursor()
 	C_Container.PickupContainerItem(stone.bag, stone.slot)
-	if CursorHasItem() then
+	if CursorHolds(stone.itemID) then
 		ClickTradeButton(1)
 	end
 	ClearCursor()
@@ -532,6 +558,7 @@ function ns:SoulstoneTargetName()
 end
 
 function ns.GroupChannel()
+	if IsInGroup(LE_PARTY_CATEGORY_INSTANCE) and not IsInGroup(LE_PARTY_CATEGORY_HOME) then return "INSTANCE_CHAT" end
 	if IsInRaid() then return "RAID" end
 	if IsInGroup() then return "PARTY" end
 end
@@ -551,10 +578,11 @@ local function OnLogin()
 	GrimoireCharDB = GrimoireCharDB or {}
 	ns.db = GrimoireDB
 	ns.char = GrimoireCharDB
-	ns.sessionShards = 0
 	BuildIndex()
 	ns:ScanSpells()
 	ns:ScanBags()
+	ns.sessionShards = 0
+	ns.sessionStart = GetTime() + 5
 	ns:CreateBar()
 	if ns.SetupOptions then ns:SetupOptions() end
 	-- ElvUI styles the bar once it has initialized; otherwise style it now.
@@ -591,14 +619,13 @@ end)
 ns:On("PLAYER_ENTERING_WORLD", function() ns:Refresh() end)
 ns:On("BAG_UPDATE_DELAYED", function() ns:Refresh() end)
 ns:On("PLAYER_REGEN_ENABLED", function()
-	if ns.secureDirty then
-		ns.secureDirty = nil
-		ns:UpdateSecure()
-	end
+	ns.secureDirty = nil -- Refresh rebuilds the secure state out of combat
+	if ns.dragStopPending and ns.FinishDrag then ns.FinishDrag() end
 	ns:Refresh()
 end)
 ns:On("PLAYER_REGEN_DISABLED", function()
 	if ns.CloseMenus then ns:CloseMenus() end
+	StaticPopup_Hide("GRIMOIRE_DELETE_SHARDS")
 end)
 ns:On("TRADE_SHOW", function()
 	if ns.pendingTrade and GetTime() - ns.pendingTrade < 10 then

@@ -46,7 +46,11 @@ local TOGGLE_MENU = [[
 	end
 ]]
 local MENU_PRE = [[ return nil, true ]] -- keep the click, then run the post body
+-- Close on release only: addon clicks fire on the down edge when ActionButtonUseKeyDown
+-- is on, and hiding the flyout then would swallow the release (and with the CVar off,
+-- the cast itself).
 local MENU_CLOSE = [[
+	if down then return end
 	local menu = owner:GetFrameRef("menu")
 	if not menu:GetAttribute("pinned") then menu:Hide() end
 ]]
@@ -482,9 +486,8 @@ function ns:CreateBar()
 		btn.dragging, btn.dragged = true, true
 		if ns.StartDrag then ns.StartDrag() else bar:StartMoving() end
 	end)
-	book:SetScript("OnDragStop", function(btn)
-		if not btn.dragging then return end
-		btn.dragging = nil
+	local function FinishDrag()
+		ns.dragStopPending = nil
 		if ns.StopDrag then
 			ns.StopDrag()
 		else
@@ -492,6 +495,18 @@ function ns:CreateBar()
 			local point, _, relPoint, x, y = bar:GetPoint()
 			ns.db.point = { point, "UIParent", relPoint, x, y }
 		end
+	end
+	ns.FinishDrag = FinishDrag
+	-- A press always starts fresh, in case a drag ended without the click that clears it.
+	book:HookScript("OnMouseDown", function(btn) btn.dragged = nil end)
+	book:SetScript("OnDragStop", function(btn)
+		if not btn.dragging then return end
+		btn.dragging = nil
+		if InCombatLockdown() then
+			ns.dragStopPending = true -- the bar is protected; finish when combat ends
+			return
+		end
+		FinishDrag()
 	end)
 	book:SetScript("OnEnter", BookTooltip)
 
@@ -523,7 +538,8 @@ function ns:CreateBar()
 	ss.title = "Soulstone"
 	ss:SetAttribute("type2", NOOP)
 	ss:SetScript("PreClick", function(_, mouse, down)
-		if not down and mouse == "LeftButton" and StoneItem("soulstone") and ns.NoteSoulstoneClick then
+		-- Both edges: the cast fires on key-down or key-up depending on ActionButtonUseKeyDown.
+		if mouse == "LeftButton" and StoneItem("soulstone") and ns.NoteSoulstoneClick then
 			ns:NoteSoulstoneClick()
 		end
 	end)
@@ -651,7 +667,7 @@ function ns:CreateBar()
 	rs:SetAttribute("type", "spell")
 	rs:SetAttribute("spell1", ns.Data.ritualOfSummoning)
 	rs:SetScript("PreClick", function(_, mouse, down)
-		if not down and ns.NoteRitualClick then ns:NoteRitualClick(ns.SafeUnitName("target"), mouse == "RightButton") end
+		if ns.NoteRitualClick then ns:NoteRitualClick(ns.SafeUnitName("target"), mouse == "RightButton") end
 	end)
 	rs:SetScript("OnEnter", function(btn)
 		TooltipAnchor(btn)
@@ -1015,9 +1031,11 @@ end
 -- Range ---------------------------------------------------------------------------
 
 -- Buttons whose spells go on an enemy target get a red tint when it's out of range.
+local RANGE_MENUS = { "Curses", "Banes", "Control" }
+local rangeList = {}
 local function RangeButtons()
-	local list = {}
-	for _, key in ipairs({ "Curses", "Banes", "Control" }) do
+	local list = wipe(rangeList)
+	for _, key in ipairs(RANGE_MENUS) do
 		local main = ns.menus[key]
 		if main then
 			if main.mode == "default" then table.insert(list, main) end
@@ -1043,8 +1061,17 @@ function ns:UpdateRange()
 end
 
 -- Live updates for usability, mana and the soulstone countdown.
-ns:On("SPELL_UPDATE_USABLE", function() ns:UpdateUsable() end)
-ns:On("SPELL_UPDATE_COOLDOWN", function() ns:UpdateUsable() end)
+local usablePending
+local function RequestUsable()
+	if usablePending then return end
+	usablePending = true
+	C_Timer.After(0, function()
+		usablePending = nil
+		ns:UpdateUsable()
+	end)
+end
+ns:On("SPELL_UPDATE_USABLE", RequestUsable)
+ns:On("SPELL_UPDATE_COOLDOWN", RequestUsable)
 ns:On("UNIT_POWER_FREQUENT", function(_, unit)
 	if unit ~= "player" or not ns.db then return end
 	if ns.db.bookMode == "mana" then ns:UpdateBook() end
