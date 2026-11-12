@@ -9,7 +9,7 @@ A warlock helper for **World of Warcraft: Forever**, in the spirit of Necrosis.
 - **Soulstone:** creates the stone, or uses it on your mouseover, then your target, then yourself. A 30-minute timer warns you before it expires. Optionally announces the soulstone to your group and whispers the target.
 - **Weapon stone:** left-click for Firestone, right-click for Spellstone. Creates the stone or applies it to your main hand, and glows when the enchant is missing or about to expire.
 - **Curse and Bane menus:** left-click casts your default, right-click opens the menu, and the spell you pick becomes the new default. Banes are separate in Forever.
-- **Buff menu:** Demon Armor/Skin, Soul Link, Demonic Sacrifice, Shadow Ward, Unending Breath, Detect Invisibility, Eye of Kilrogg, Sense Demons. Glows when you have no armor on.
+- **Buff menu:** Demon Armor/Skin, Soul Link, Demonic Sacrifice, Shadow Ward, Unending Breath, Detect Invisibility, Eye of Kilrogg, Sense Demons. Glows when you have no armor on, or when it has a minute left.
 - **Crowd control menu:** Banish, Fear, Howl of Terror, Subjugate Demon, Death Coil. Glows when your target can be banished or subjugated.
 - **Demon menu:** the demons you know. Shift-click casts Fel Domination first.
 - **Mount button:** your best warlock mount, Dreadsteed or Felsteed.
@@ -21,6 +21,7 @@ A warlock helper for **World of Warcraft: Forever**, in the spirit of Necrosis.
 - **Visibility:** always shown or only in combat, optionally hidden in cities and inns, and optional fading until you mouse over it.
 - **Tome colors:** Void, Shadow, Fel and Blood.
 - **Timers:** estimated Banish, Fear, Howl, Subjugate and Death Coil bars, started from your own casts, with warnings before Banish and Subjugate end.
+- **Armor alerts:** a message and sound 60 seconds before Demon Armor or Demon Skin runs out (counted down even in combat), and an alert when you have no armor on, repeated every minute until you recast. The no-armor check runs out of combat only. Times and sounds are adjustable.
 - **Shadow Trance alert** when Nightfall procs.
 - **Chat lines** for soulstones, demon summons and mounts. These go to party/raid only; Blizzard blocks addons from using /say in the open world.
 - **Keybindings** for every button: Key Bindings → AddOns → Grimoire. With ElvUI, `/kb` hover binding works on Grimoire buttons, including individual spells in the menus.

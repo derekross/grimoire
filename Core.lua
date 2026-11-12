@@ -54,6 +54,10 @@ ns.defaults = {
 	weaponWarnMinutes = 5,
 	defaults = { Control = 2 }, -- menu key -> entry index picked as that menu's default (Control: Fear)
 	armorReminder = true,
+	armorWarnSeconds = 60, -- warn this long before armor runs out (0 = off)
+	armorWarnSound = true,
+	armorMissingAlert = true, -- sound and message when no armor is on (out of combat)
+	armorNagSeconds = 60, -- repeat that alert this often until you recast (0 = once)
 
 	-- Timers and alerts
 	timers = true,

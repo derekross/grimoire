@@ -905,8 +905,11 @@ function ns:UpdateArmorGlow()
 		if buffs then SetGlow(buffs, false) end
 		return
 	end
+	-- Glow when armor is missing (readable only out of combat) or about to run out
+	-- (ns.armorLow, counted down by Armor.lua, so it also works in combat).
 	local missing = ns:MissingAura(ns.Data.armor)
-	if missing ~= nil then SetGlow(buffs, missing and ns.BestSpell(ns.Data.buffs[1]) ~= nil) end
+	if missing == nil and not ns.armorLow then return end
+	SetGlow(buffs, (ns.armorLow or missing == true) and ns.BestSpell(ns.Data.buffs[1]) ~= nil)
 end
 
 local function UpdateStoneButton(btn, family)
