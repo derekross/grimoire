@@ -8,7 +8,8 @@ local addonName, ns = ...
 
 local GetTime = GetTime
 local DEFAULT_DURATION = 30 * 60
-local SETTLE = 5 -- seconds after a loading screen before nagging
+local SETTLE = 8  -- seconds after a loading screen or zone change before checking for "no armor"
+local CONFIRM = 3 -- "no armor" has to be seen this long in a row before it alerts
 
 local state = {
 	expires = nil,       -- GetTime() when the armor runs out, if known
@@ -17,6 +18,7 @@ local state = {
 	missing = false,     -- out of combat, no armor was found
 	nextNag = nil,       -- when the next "no armor" alert is due
 	quietUntil = 0,
+	loading = false,     -- a loading screen is up; aura data isn't trustworthy
 }
 
 local isArmor = {}
@@ -53,7 +55,23 @@ local function ReadArmor()
 			return true, (expires and expires > 0) and expires or nil, id
 		end
 	end
+	-- Double-check with a full buff scan before calling it missing: the by-ID lookup
+	-- can come back empty while the aura cache is still filling after a zone change.
+	for i = 1, 40 do
+		local ok, aura = pcall(C_UnitAuras.GetBuffDataByIndex, "player", i)
+		if not ok or issecretvalue(aura) then return nil end
+		if not aura then break end
+		local id = ns.Safe(aura.spellId)
+		if id == nil then return nil end
+		if isArmor[id] then return true, nil, id end
+	end
 	return false
+end
+
+-- Loading screens and zone changes: stop trusting "no armor" until things settle.
+local function Pause()
+	state.quietUntil = GetTime() + SETTLE
+	state.missing, state.nextNag = false, nil
 end
 
 local function CanNag(now)
@@ -69,9 +87,11 @@ end
 local function Tick()
 	local db = ns.db
 	if not db then return end
+	if state.loading then return end
 	local now = GetTime()
 
 	local on, expires, spellID = ReadArmor()
+	if on == false and now < state.quietUntil then on = nil end -- still settling
 	if on then
 		state.missing, state.nextNag = false, nil
 		state.spellID = spellID
@@ -83,8 +103,10 @@ local function Tick()
 		state.expires = nil
 		if not state.missing then
 			state.missing = true
-			state.nextNag = now
+			state.nextNag = now + CONFIRM
 		end
+	elseif state.missing and now < state.quietUntil then
+		state.missing, state.nextNag = false, nil
 	elseif state.expires and now >= state.expires then
 		state.expires = nil -- ran out in combat; the next out-of-combat read confirms it
 	end
@@ -121,9 +143,22 @@ ns:On("UNIT_SPELLCAST_SUCCEEDED", function(_, unit, _, spellID)
 	SetLow(false)
 end)
 
-ns:On("PLAYER_ENTERING_WORLD", function()
-	state.quietUntil = GetTime() + SETTLE
+ns:On("LOADING_SCREEN_ENABLED", function()
+	state.loading = true
+	Pause()
 end)
+
+ns:On("LOADING_SCREEN_DISABLED", function()
+	state.loading = false
+	Pause()
+end)
+
+ns:On("PLAYER_ENTERING_WORLD", function()
+	state.loading = false
+	Pause()
+end)
+
+ns:On("ZONE_CHANGED_NEW_AREA", Pause)
 
 ns:Module(function()
 	C_Timer.NewTicker(1, Tick)
