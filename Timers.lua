@@ -286,11 +286,23 @@ local function CheckTranceAura()
 	SetTrance(aura ~= nil)
 end
 
+-- Forever makes aura data secret in combat, but spell info isn't. Shadow Trance makes
+-- Shadow Bolt instant, so a 0 cast time means the proc is up. Returns nil if unreadable.
+local function TranceFromCastTime()
+	local name = C_Spell.GetSpellName(ns.Data.shadowBolt)
+	local info = name and ns.Safe(C_Spell.GetSpellInfo(name))
+	local castTime = info and ns.Safe(info.castTime)
+	if type(castTime) ~= "number" then return nil end
+	return castTime == 0
+end
+
 -- In combat, use the aura update payload where its fields aren't secret. Any of it can
 -- be (the flag, the lists, each aura), so every piece is checked before it's used.
 local function OnAura(_, _, info)
 	if not trance then return end
 	if not InCombatLockdown() then return CheckTranceAura() end
+	local up = TranceFromCastTime()
+	if up ~= nil then SetTrance(up) end
 	if not info then return end
 	for _, aura in ipairs(ns.Safe(info.addedAuras) or {}) do
 		aura = ns.Safe(aura)
