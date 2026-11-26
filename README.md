@@ -8,7 +8,7 @@ A warlock helper for **World of Warcraft: Forever**, in the spirit of Necrosis.
 - **Healthstone:** creates your highest learned rank, or uses the stone in your bags. Glows when your stone is outdated; shift-right-click deletes it (with a prompt) so you can make the new rank. Right-click trades it to your friendly target.
 - **Soulstone:** creates the stone, or uses it on your mouseover, then your target, then yourself. A 30-minute timer warns you before it expires. Optionally announces the soulstone to your group and whispers the target.
 - **Weapon stone:** left-click for Firestone, right-click for Spellstone. Creates the stone or applies it to your main hand, and glows when the enchant is missing or about to expire.
-- **Curse and Bane menus:** left-click casts your default, right-click opens the menu, and the spell you pick becomes the new default. Banes are separate in Forever.
+- **Curse and Bane menus:** left-click casts your default, right-click opens the menu. In the menu, left-click a spell to cast it and make it the new default, or right-click to cast it once without changing the default. Banes are separate in Forever.
 - **Buff menu:** Demon Armor/Skin, Soul Link, Demonic Sacrifice, Shadow Ward, Unending Breath, Detect Invisibility, Eye of Kilrogg, Sense Demons. Glows when you have no armor on, or when it has a minute left.
 - **Crowd control menu:** Banish, Fear, Howl of Terror, Subjugate Demon, Death Coil. Glows when your target can be banished or subjugated.
 - **Demon menu:** the demons you know. Shift-click casts Fel Domination first.
@@ -47,7 +47,9 @@ Without ElvUI, Grimoire uses a plain look, and its settings are in Blizzard's Ad
 
 ## Commands
 
-`/grim [config | show | hide | lock | unlock | cap <n> | msg <text> | keywords <a, b> | queue | reset]`
+`/grim [config | show | hide | lock | unlock | cap <n> | stones | msg <text> | keywords <a, b> | queue | reset]`
+
+`/grim stones` shows which stone ranks Grimoire thinks you know, what is in your bags, and every stone spell in your spellbook with its ID.
 
 ## Limitations
 

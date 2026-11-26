@@ -224,6 +224,36 @@ SlashCmdList.GRIMOIRE = function(msg)
 	elseif cmd == "keywords" then
 		ns:SetOption("summonKeywords", msg:match("^%S+%s+(.+)$") or ns.defaults.summonKeywords)
 		ns.Print("Summon keywords: " .. ns.db.summonKeywords)
+	elseif cmd == "stones" then
+		ns:ScanSpells()
+		for _, family in ipairs({ "healthstone", "soulstone", "firestone", "spellstone" }) do
+			local known, stone = ns.known[family], ns.stones[family]
+			local ranks = {}
+			for i, rank in ipairs(ns.Data.stones[family]) do
+				ranks[#ranks + 1] = ("%d:%s"):format(rank.spell, ns.IsKnown(rank.spell) and "yes" or "no")
+			end
+			ns.Print(("%s: can make %s, in bags %s  [%s]"):format(family,
+				known and (C_Item.GetItemNameByID(ns.Data.stones[family][known.rank].item) or ("rank " .. known.rank)) or "none",
+				stone and (C_Item.GetItemNameByID(stone.itemID) or stone.itemID) or "none", table.concat(ranks, " ")))
+		end
+		-- What the spellbook itself lists, to catch ranks with IDs Grimoire doesn't know.
+		local bank = Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+		local found = {}
+		for line = 1, (C_SpellBook.GetNumSpellBookSkillLines and C_SpellBook.GetNumSpellBookSkillLines() or 0) do
+			local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
+			if info and info.itemIndexOffset and info.numSpellBookItems then
+				for index = info.itemIndexOffset + 1, info.itemIndexOffset + info.numSpellBookItems do
+					local item = C_SpellBook.GetSpellBookItemInfo(index, bank)
+					local name = item and item.name
+					if name and name:find("stone") and item.spellID then
+						found[#found + 1] = ("%s%s = %d"):format(name,
+							(item.subName and item.subName ~= "") and (" (" .. item.subName .. ")") or "", item.spellID)
+					end
+				end
+			end
+		end
+		ns.Print("Spellbook: " .. (#found > 0 and table.concat(found, ", ") or "no stone spells found"))
+		ns:Refresh()
 	elseif cmd == "queue" then
 		if ns.ToggleSummonQueue then ns:ToggleSummonQueue() end
 	elseif cmd == "reset" then
@@ -233,6 +263,6 @@ SlashCmdList.GRIMOIRE = function(msg)
 		ns.bar:SetPoint(ns.db.point[1], UIParent, ns.db.point[3], ns.db.point[4], ns.db.point[5])
 		ns.Print("Bar position reset.")
 	else
-		ns.Print("/grim [config | ring | bar | raid | tome void|shadow|fel|blood | book shards|soulstone|mana | show | hide | lock | unlock | cap <n> | msg <text> | keywords <a, b> | queue | reset]")
+		ns.Print("/grim [config | ring | bar | raid | tome void|shadow|fel|blood | book shards|soulstone|mana | show | hide | lock | unlock | cap <n> | stones | msg <text> | keywords <a, b> | queue | reset]")
 	end
 end

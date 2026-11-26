@@ -61,7 +61,8 @@ ns.buttons = buttons
 ns.menus = {}
 
 -- Bar order. Keys double as button name parts and option keys.
-local ORDER = { "Book", "Healthstone", "Soulstone", "WeaponStone", "Curses", "Banes", "Buffs", "LifeTap", "Control", "Demons", "Mount", "Ritual" }
+-- Buffs sits last, at the top of the ring, so its long menu has room; Summoning (no menu) takes its old spot.
+local ORDER = { "Book", "Healthstone", "Soulstone", "WeaponStone", "Curses", "Banes", "Ritual", "LifeTap", "Control", "Demons", "Mount", "Buffs" }
 ns.buttonOrder = ORDER
 
 ns.buttonTitles = {
@@ -251,13 +252,16 @@ local function CreateMenu(key, entries, mode, opts)
 			if btn.spellID then GameTooltip:SetSpellByID(btn.spellID) end
 			AddShardLine(entry.shard)
 			GameTooltip:AddLine(" ")
-			if mode == "default" then AddHint("Click: cast and make it the default") end
+			if mode == "default" then
+				AddHint("Left-click: cast and make it the default")
+				AddHint("Right-click: cast once, keep the default")
+			end
 			if opts.demon and ns.hasFelDomination then AddHint("Shift-click: Fel Domination first") end
 			GameTooltip:Show()
 		end)
 		if mode == "default" then
-			b:SetScript("PostClick", function(btn, _, down)
-				if down then return end
+			b:SetScript("PostClick", function(btn, button, down)
+				if down or button ~= "LeftButton" then return end -- right-click: cast once, default unchanged
 				ns.db.defaults[key] = btn.index
 				ns:RequestSecureUpdate()
 				ns:UpdateVisuals()

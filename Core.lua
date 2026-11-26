@@ -139,8 +139,14 @@ ns.Dispatch = Dispatch
 
 -- Spell knowledge -------------------------------------------------------------
 
+-- Several checks, because Forever's client doesn't always report a newly learned rank
+-- through C_SpellBook.IsSpellKnown alone.
 local function IsKnown(spellID)
-	return spellID and C_SpellBook.IsSpellKnown(spellID) or false
+	if not spellID then return false end
+	if C_SpellBook.IsSpellKnown(spellID) then return true end
+	if IsPlayerSpell and IsPlayerSpell(spellID) then return true end
+	if IsSpellKnownOrOverridesKnown and IsSpellKnownOrOverridesKnown(spellID) then return true end
+	return IsSpellKnown and IsSpellKnown(spellID) or false
 end
 ns.IsKnown = IsKnown
 
@@ -597,7 +603,7 @@ local function OnLogin()
 		if unitEvents[event] then
 			Grimoire:RegisterUnitEvent(event, "player")
 		else
-			Grimoire:RegisterEvent(event)
+			pcall(Grimoire.RegisterEvent, Grimoire, event) -- some events don't exist on every client
 		end
 	end
 	ns:Refresh()
@@ -620,6 +626,12 @@ ns:On("SPELLS_CHANGED", function()
 	ns:ScanSpells()
 	ns:Refresh()
 end)
+-- A new rank can land after SPELLS_CHANGED has fired; rescan once the spellbook has settled.
+for _, event in ipairs({ "LEARNED_SPELL_IN_TAB", "LEARNED_SPELL_IN_SKILL_LINE", "PLAYER_LEVEL_UP" }) do
+	ns:On(event, function()
+		C_Timer.After(1, function() ns:ScanSpells(); ns:Refresh() end)
+	end)
+end
 ns:On("PLAYER_ENTERING_WORLD", function() ns:Refresh() end)
 ns:On("BAG_UPDATE_DELAYED", function() ns:Refresh() end)
 ns:On("PLAYER_REGEN_ENABLED", function()
